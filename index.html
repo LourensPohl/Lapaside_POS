@@ -620,6 +620,76 @@
   }
 
   ::placeholder{color:var(--muted-soft);}
+
+  .admin-gate{
+    display:none;
+    position:fixed; inset:0;
+    background:rgba(30,34,38,0.6);
+    z-index:200;
+    align-items:center;
+    justify-content:center;
+  }
+  .admin-gate.active{display:flex;}
+  .admin-gate-box{
+    background:var(--paper);
+    border-radius:var(--radius-lg);
+    padding:var(--space-5);
+    width:90%;
+    max-width:280px;
+    text-align:center;
+    box-shadow:0 8px 30px rgba(0,0,0,0.3);
+  }
+  .admin-gate-title{
+    font-family:'Barlow Condensed', sans-serif;
+    text-transform:uppercase;
+    font-weight:700;
+    font-size:16px;
+    margin-bottom:var(--space-3);
+  }
+  .admin-gate-box input{
+    width:100%;
+    padding:var(--space-3);
+    font-size:20px;
+    letter-spacing:0.3em;
+    text-align:center;
+    border:1.5px solid var(--concrete-line);
+    border-radius:var(--radius-md);
+    background:var(--concrete);
+    margin-bottom:var(--space-3);
+  }
+  .admin-gate-buttons{display:flex; gap:var(--space-2);}
+  .admin-gate-buttons .toolbtn{flex:1;}
+
+  .logrow-actions{display:flex; gap:var(--space-1); align-items:center;}
+  .logrow-icon-btn{
+    width:28px; height:28px;
+    border-radius:var(--radius-sm);
+    border:1.5px solid var(--concrete-line);
+    background:var(--paper);
+    display:flex; align-items:center; justify-content:center;
+    font-size:14px;
+    cursor:pointer;
+    flex-shrink:0;
+  }
+  .logrow-icon-btn--delete{border-color:var(--stop); color:var(--stop);}
+  .logrow-icon-btn--print{border-color:var(--steel); color:var(--steel);}
+
+  #printArea{display:none;}
+  @media print{
+    body > *:not(#printArea){display:none !important;}
+    #printArea{
+      display:block !important;
+      font-family:'Barlow', sans-serif;
+      color:#000;
+      padding:20px;
+    }
+    #printArea h1{font-family:'Barlow Condensed', sans-serif; font-size:22px; margin:0 0 4px;}
+    #printArea .receipt-meta{font-size:12px; color:#333; margin-bottom:16px;}
+    #printArea table{width:100%; border-collapse:collapse; margin:12px 0;}
+    #printArea td, #printArea th{border:1px solid #999; padding:6px 8px; font-size:13px; text-align:left;}
+    #printArea .receipt-total{font-size:16px; font-weight:700; text-align:right; margin-top:8px;}
+    #printArea .receipt-sig img{max-width:220px; border:1px solid #999; margin-top:8px;}
+  }
 </style>
 </head>
 <body>
@@ -759,6 +829,20 @@
 
 </main>
 
+<div class="admin-gate" id="adminGate">
+  <div class="admin-gate-box">
+    <div class="admin-gate-title">Admin PIN Required</div>
+    <input type="password" id="adminPinInput" inputmode="numeric" maxlength="8" placeholder="Enter PIN">
+    <div class="admin-gate-buttons">
+      <button type="button" class="toolbtn" onclick="cancelAdminGate()">Cancel</button>
+      <button type="button" class="toolbtn toolbtn--save" onclick="confirmAdminGate()">Confirm</button>
+    </div>
+  </div>
+</div>
+
+<div id="printArea"></div>
+
+
 <div class="totalbar">
   <div>
     <div class="tot-label">Total</div>
@@ -796,6 +880,13 @@
     ["Other"],
   ];
   const payMethods = ["Cash","Card","EFT","Fleet Card","Account","Other"];
+
+  // ---- Admin PIN gate ----
+  // A simple deterrent against accidental taps by staff — NOT real security
+  // (visible in page source to anyone who looks). Change this anytime by
+  // editing this one line.
+  const ADMIN_PIN = '2468';
+  let pendingAdminAction = null;
 
   // ---- Live backend (Google Sheet via Apps Script) ----
   const BACKEND_URL = 'https://script.google.com/macros/s/AKfycbwi4TxGgzjgr7_ROVuQHwG-a8Uw9Zobu2nv_03qERBAb7OnmNDWlqx94I66aiTohbnaoA/exec';
@@ -1147,6 +1238,35 @@
     });
   }
 
+  // ---- Admin PIN gate ----
+  function requireAdmin(action){
+    pendingAdminAction = action;
+    document.getElementById('adminPinInput').value = '';
+    document.getElementById('adminGate').classList.add('active');
+    setTimeout(()=>document.getElementById('adminPinInput').focus(), 50);
+  }
+  function cancelAdminGate(){
+    pendingAdminAction = null;
+    document.getElementById('adminGate').classList.remove('active');
+  }
+  function confirmAdminGate(){
+    const input = document.getElementById('adminPinInput');
+    if(input.value === ADMIN_PIN){
+      document.getElementById('adminGate').classList.remove('active');
+      const action = pendingAdminAction;
+      pendingAdminAction = null;
+      if(action) action();
+    } else {
+      alert('Incorrect PIN.');
+      input.value = '';
+      input.focus();
+    }
+  }
+
+  function loadOrderForEditGated(i){
+    requireAdmin(()=>loadOrderForEdit(i));
+  }
+
   function loadOrderForEdit(i){
     const o = orders[i];
     editingIndex = i;
@@ -1253,26 +1373,86 @@
     });
   }
 
+  function deleteOrderGated(i){
+    requireAdmin(()=>deleteOrder(i));
+  }
+
+  function deleteOrder(i){
+    const order = orders[i];
+    if(!order) return;
+    if(!confirm(`Delete order #${order.orderNo} (${order.company}, R${order.total.toFixed(2)})? This cannot be undone.`)) return;
+    orders.splice(i, 1);
+    renderLog();
+    if(editingIndex === i) cancelEdit();
+    fetch(BACKEND_URL, {
+      method: 'POST',
+      headers: {'Content-Type': 'text/plain;charset=utf-8'},
+      body: JSON.stringify({action: 'deleteOrder', orderNo: order.orderNo})
+    }).catch(err => console.error('Could not delete order from backend:', err));
+  }
+
+  function printOrder(i){
+    const o = orders[i];
+    if(!o) return;
+
+    const washRows = Object.entries(o.wash).map(([k,v])=>`<tr><td>${k}</td><td>${v.qty}</td><td>R${v.price.toFixed(2)}</td><td>R${(v.qty*v.price).toFixed(2)}</td></tr>`).join('');
+    const stopRows = Object.entries(o.stop).map(([k,v])=>`<tr><td>${k}</td><td>${v.qty}</td><td>R${v.price.toFixed(2)}</td><td>R${(v.qty*v.price).toFixed(2)}</td></tr>`).join('');
+    const extraVehicleRows = (o.extraVehicles||[]).map(v=>
+      `<div>${v.driver?v.driver+' — ':''}${v.type||'Vehicle'}: ${v.reg||'—'}${v.fleet?` (Fleet ${v.fleet})`:''}</div>`
+    ).join('');
+
+    document.getElementById('printArea').innerHTML = `
+      <h1>Lapaside Truck Wash &amp; Truck Stop</h1>
+      <div class="receipt-meta">
+        280 Nooitgedacht, C/o Botha Street &amp; R25, Bronkhorstspruit<br>
+        Tel: 065 928 3121 / 069 724 6116 &nbsp;·&nbsp; lapasidetrucks@gmail.com<br>
+        Co Reg. No. 2006/177999/23
+      </div>
+      <table>
+        <tr><td><strong>Order No.</strong></td><td>#${o.orderNo}</td><td><strong>Slip No.</strong></td><td>${o.slipNo || '—'}</td></tr>
+        <tr><td><strong>Date</strong></td><td>${o.date}</td><td><strong>Payment</strong></td><td>${o.payment}</td></tr>
+        <tr><td><strong>Company</strong></td><td colspan="3">${o.company}</td></tr>
+        <tr><td><strong>Driver</strong></td><td>${o.driver || '—'}</td><td><strong>Vehicle</strong></td><td>${o.vehicle || '—'}</td></tr>
+        <tr><td><strong>Reg No.</strong></td><td>${o.reg || '—'}</td><td><strong>Fleet No.</strong></td><td>${o.fleet || '—'}</td></tr>
+        <tr><td><strong>Arrived</strong></td><td>${o.arrive || '—'}</td><td><strong>Departed</strong></td><td>${o.depart || '—'}</td></tr>
+      </table>
+      ${extraVehicleRows ? `<div><strong>Additional Vehicles:</strong>${extraVehicleRows}</div>` : ''}
+      <table>
+        <tr><th>Service</th><th>Qty</th><th>Price</th><th>Line Total</th></tr>
+        ${washRows}${stopRows}
+      </table>
+      <div class="receipt-total">Total: R ${o.total.toFixed(2)}</div>
+      ${o.signature ? `<div class="receipt-sig"><strong>Driver Signature:</strong><br><img src="${o.signature}"></div>` : ''}
+    `;
+    window.print();
+  }
+
   function renderLog(){
     const el = document.getElementById('logList');
     if(orders.length===0){ el.innerHTML = '<div class="empty-log">No orders saved yet this session.</div>'; return; }
     el.innerHTML = orders.map((o,i)=>`
-      <div class="logrow" onclick="loadOrderForEdit(${i})">
+      <div class="logrow" onclick="loadOrderForEditGated(${i})">
         <div>
           <div class="lname">${o.company} <span class="mono">#${o.orderNo}</span> ${syncBadge(o, i)}</div>
           <div class="lmeta">${o.slipNo ? `Slip #${o.slipNo} · ` : ''}${o.worker ? `${o.worker} · ` : ''}${o.driver || '—'} · ${o.payment}${o.extraVehicles.length ? ` · ${o.extraVehicles.length+1} vehicles` : ''}${o.signature ? ' · Signed ✓' : ''}</div>
         </div>
-        <div class="lamt">R ${o.total.toFixed(2)}</div>
+        <div class="logrow-actions">
+          <div class="lamt">R ${o.total.toFixed(2)}</div>
+          <div class="logrow-icon-btn logrow-icon-btn--print" title="Print receipt" onclick="event.stopPropagation(); printOrder(${i})">🖶</div>
+          <div class="logrow-icon-btn logrow-icon-btn--delete" title="Delete order" onclick="event.stopPropagation(); deleteOrderGated(${i})">✕</div>
+        </div>
       </div>
     `).join('');
   }
 
   function clearLog(){
-    if(confirm('Clear all orders from this session log? This cannot be undone.')){
-      orders = [];
-      if(editingIndex !== null) cancelEdit();
-      renderLog();
-    }
+    requireAdmin(()=>{
+      if(confirm('Clear all orders from this session log? This cannot be undone.')){
+        orders = [];
+        if(editingIndex !== null) cancelEdit();
+        renderLog();
+      }
+    });
   }
 
   function buildExportData(){
@@ -1291,6 +1471,10 @@
   }
 
   function exportCSV(){
+    requireAdmin(doExportCSV);
+  }
+
+  function doExportCSV(){
     if(orders.length===0){ alert('No orders to export yet.'); return; }
     const {headers, rows} = buildExportData();
     const csv = [headers, ...rows].map(r=>r.map(v=>`"${String(v??'').replace(/"/g,'""')}"`).join(',')).join('\n');
@@ -1304,6 +1488,10 @@
   }
 
   function exportXLSX(){
+    requireAdmin(doExportXLSX);
+  }
+
+  function doExportXLSX(){
     if(orders.length===0){ alert('No orders to export yet.'); return; }
     if(typeof XLSX === 'undefined'){ alert('Excel export library did not load. Check your internet connection and try again.'); return; }
     const {headers, rows} = buildExportData();
