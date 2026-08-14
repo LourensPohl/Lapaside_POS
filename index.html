@@ -1,0 +1,1419 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1">
+<title>Lapaside Truck Wash — Order Entry</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@600;700;800&family=Barlow:wght@400;500;600;700&family=IBM+Plex+Mono:wght@500;600&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<style>
+  :root{
+    --asphalt:#1E2226;
+    --asphalt-soft:#2C3138;
+    --concrete:#F5F2EC;
+    --concrete-line:#E2DDD2;
+    --amber:#FFB020;
+    --amber-dark:#D9921A;
+    --amber-tint:#FFF6E4;
+    --steel:#35618C;
+    --go:#2F8F5B;
+    --stop:#C0392B;
+    --plum:#6E4C9E;
+    --teal:#1E8A8C;
+    --copper:#B5651D;
+    --paper:#FFFFFF;
+    --muted:#847C6E;
+    --muted-soft:#B4AC9E;
+
+    --space-1:4px;
+    --space-2:8px;
+    --space-3:12px;
+    --space-4:16px;
+    --space-5:20px;
+    --space-6:24px;
+
+    --radius-sm:6px;
+    --radius-md:8px;
+    --radius-lg:12px;
+    --radius-pill:999px;
+
+    --shadow-card:0 1px 2px rgba(30,34,38,0.05), 0 1px 0 rgba(30,34,38,0.03);
+  }
+  *{box-sizing:border-box;}
+  html,body{margin:0;padding:0;}
+  body{
+    background:var(--concrete);
+    font-family:'Barlow', sans-serif;
+    color:var(--asphalt);
+    -webkit-tap-highlight-color:transparent;
+    padding-bottom:128px;
+  }
+  h1,h2,h3,.display{
+    font-family:'Barlow Condensed', sans-serif;
+    text-transform:uppercase;
+    letter-spacing:0.03em;
+  }
+  .mono{font-family:'IBM Plex Mono', monospace;}
+  button, input, select, textarea{font-family:inherit;}
+  button:focus-visible, .chip:focus-visible, .tier-btn:focus-visible, .pay-chip:focus-visible{
+    outline:2px solid var(--steel);
+    outline-offset:2px;
+  }
+
+  /* HEADER */
+  header{
+    background:var(--asphalt);
+    color:var(--concrete);
+    padding:var(--space-5) var(--space-5) var(--space-6);
+    position:relative;
+    overflow:hidden;
+  }
+  header::after{
+    content:"";
+    position:absolute;
+    right:-40px; top:-40px;
+    width:160px; height:160px;
+    background:var(--amber);
+    opacity:0.08;
+    transform:rotate(20deg);
+  }
+  .brand-row{display:flex; align-items:center; justify-content:space-between; gap:var(--space-3);}
+  .brand{display:flex; flex-direction:column;}
+  .brand .name{font-size:26px; font-weight:800; line-height:1;}
+  .brand .sub{font-size:13px; font-weight:600; color:var(--amber); letter-spacing:0.12em; margin-top:var(--space-1);}
+  .stub{
+    background:var(--amber);
+    color:var(--asphalt);
+    padding:var(--space-2) var(--space-3);
+    border-radius:var(--radius-sm);
+    text-align:right;
+    transform:rotate(-1.5deg);
+    box-shadow:0 3px 0 rgba(0,0,0,0.25);
+  }
+  .stub .label{font-size:10px; font-weight:700; letter-spacing:0.15em; opacity:0.75;}
+  .stub .num{font-size:20px; font-weight:600; line-height:1.1;}
+
+  /* LAYOUT */
+  main{padding:var(--space-4); max-width:640px; margin:0 auto;}
+  .card{
+    background:var(--paper);
+    border:1px solid var(--concrete-line);
+    border-left:4px solid var(--concrete-line);
+    border-radius:var(--radius-lg);
+    padding:var(--space-4);
+    margin-bottom:var(--space-4);
+    box-shadow:var(--shadow-card);
+  }
+  .card--customer{border-left-color:var(--amber);}
+  .card--customer h2 .dot{background:var(--amber);}
+  .card--wash{border-left-color:var(--steel);}
+  .card--wash h2 .dot{background:var(--steel);}
+  .card--stop{border-left-color:var(--go);}
+  .card--stop h2 .dot{background:var(--go);}
+  .card--payment{border-left-color:var(--stop);}
+  .card--payment h2 .dot{background:var(--stop);}
+  .card--signature{border-left-color:var(--plum);}
+  .card--signature h2 .dot{background:var(--plum);}
+  .card--log{border-left-color:var(--teal);}
+  .card--log h2 .dot{background:var(--teal);}
+  .card--shift{border-left-color:var(--copper);}
+  .card--shift h2 .dot{background:var(--copper);}
+  .shift-chips{display:flex; flex-wrap:wrap; gap:var(--space-2);}
+  .shift-chip{
+    flex:1 1 auto;
+    min-width:80px;
+    text-align:center;
+    border:1.5px solid var(--concrete-line);
+    background:var(--concrete);
+    border-radius:var(--radius-md);
+    padding:var(--space-3) var(--space-2);
+    font-weight:700;
+    font-size:14px;
+    cursor:pointer;
+    transition:background 0.12s, border-color 0.12s;
+  }
+  .shift-chip.active{
+    background:var(--copper);
+    border-color:var(--copper);
+    color:white;
+  }
+  .shift-hint{
+    font-size:12px;
+    color:var(--muted-soft);
+    margin-top:var(--space-2);
+    font-style:italic;
+  }
+  .card h2{
+    font-size:19px;
+    margin:0 0 var(--space-3);
+    display:flex; align-items:center; gap:var(--space-2);
+    color:var(--asphalt);
+  }
+  .card h2 .dot{width:9px; height:9px; border-radius:50%; background:var(--amber); display:inline-block; flex-shrink:0;}
+  .h2-with-action{justify-content:space-between; flex-wrap:wrap; row-gap:var(--space-2);}
+  .h2-title{display:flex; align-items:center; gap:var(--space-2);}
+  .slip-field{
+    display:flex;
+    align-items:center;
+    gap:var(--space-2);
+    font-family:'Barlow', sans-serif;
+    text-transform:none;
+    letter-spacing:normal;
+  }
+  .slip-field label{
+    font-size:11px;
+    font-weight:700;
+    text-transform:uppercase;
+    letter-spacing:0.05em;
+    color:var(--muted);
+  }
+  .slip-field input{
+    width:56px;
+    padding:var(--space-1) var(--space-2);
+    font-family:'IBM Plex Mono', monospace;
+    font-size:15px;
+    font-weight:700;
+    text-align:center;
+    border:1.5px solid var(--concrete-line);
+    border-radius:var(--radius-sm);
+    background:var(--concrete);
+    color:var(--asphalt);
+  }
+  .slip-field input:focus{outline:none; border-color:var(--amber); background:var(--paper);}
+  .subtotal-row{
+    display:flex;
+    justify-content:space-between;
+    align-items:center;
+    margin-top:var(--space-3);
+    padding-top:var(--space-3);
+    border-top:1px dashed var(--concrete-line);
+    font-size:14px;
+    font-weight:700;
+    color:var(--asphalt);
+  }
+  .subtotal-row .mono{font-size:17px; color:var(--steel);}
+
+  .field{margin-bottom:var(--space-3);}
+  .field:last-child{margin-bottom:0;}
+  .field label{
+    display:block;
+    font-size:12px;
+    font-weight:700;
+    text-transform:uppercase;
+    letter-spacing:0.06em;
+    color:var(--muted);
+    margin-bottom:var(--space-1);
+  }
+  .subheading{
+    font-size:12px;
+    font-weight:700;
+    text-transform:uppercase;
+    letter-spacing:0.06em;
+    color:var(--muted);
+    margin:var(--space-4) 0 var(--space-2);
+    padding-top:var(--space-3);
+    border-top:1px dashed var(--concrete-line);
+  }
+  .field input, .field textarea{
+    width:100%;
+    padding:var(--space-3);
+    font-size:16px;
+    font-family:'Barlow', sans-serif;
+    border:1.5px solid var(--concrete-line);
+    border-radius:var(--radius-md);
+    background:var(--concrete);
+    color:var(--asphalt);
+    transition:border-color 0.12s, background 0.12s;
+  }
+  .field input:focus, .field textarea:focus{
+    outline:none;
+    border-color:var(--steel);
+    background:var(--paper);
+  }
+  .row2{display:grid; grid-template-columns:1fr 1fr; gap:var(--space-2);}
+
+  .extra-vehicles{margin-top:var(--space-1);}
+  .extra-vehicle-row{
+    display:grid;
+    grid-template-columns:1.1fr 1.1fr 1fr 1fr auto;
+    gap:var(--space-2);
+    align-items:center;
+    background:var(--concrete);
+    border:1.5px solid var(--concrete-line);
+    border-left:4px solid var(--steel);
+    border-radius:var(--radius-md);
+    padding:var(--space-2) var(--space-2) var(--space-2) var(--space-3);
+    margin-bottom:var(--space-2);
+  }
+  @media (max-width:480px){
+    .extra-vehicle-row{grid-template-columns:1fr 1fr;}
+    .extra-vehicle-row .remove-vehicle-btn{grid-column:2; justify-self:end;}
+  }
+  .extra-vehicle-row input{
+    padding:var(--space-2) var(--space-2);
+    font-size:14px;
+    border:1.5px solid var(--concrete-line);
+    border-radius:var(--radius-sm);
+    background:var(--paper);
+    color:var(--asphalt);
+    width:100%;
+    transition:border-color 0.12s;
+  }
+  .extra-vehicle-row input:focus{outline:none; border-color:var(--steel);}
+  .remove-vehicle-btn{
+    width:30px; height:30px;
+    border-radius:var(--radius-sm);
+    border:1.5px solid var(--stop);
+    background:var(--paper);
+    color:var(--stop);
+    font-size:16px;
+    font-weight:700;
+    line-height:1;
+    cursor:pointer;
+    display:flex; align-items:center; justify-content:center;
+    transition:background 0.12s;
+  }
+  .remove-vehicle-btn:active{background:var(--stop); color:var(--paper);}
+  .extra-vehicle-row.primary-row{
+    grid-template-columns:1.1fr 1.1fr 1fr 1fr;
+    margin-bottom:var(--space-2);
+  }
+  @media (max-width:480px){
+    .extra-vehicle-row.primary-row{grid-template-columns:1fr 1fr; row-gap:var(--space-2);}
+  }
+  .addvehicle-btn{
+    background:var(--concrete);
+    border:1.5px dashed var(--concrete-line);
+    color:var(--steel);
+    font-weight:700;
+    font-size:14px;
+    border-radius:var(--radius-md);
+    padding:var(--space-3) var(--space-3);
+    width:100%;
+    cursor:pointer;
+    margin-bottom:var(--space-3);
+    transition:background 0.12s, border-color 0.12s;
+  }
+  .addvehicle-btn:active{background:var(--concrete-line);}
+
+  /* SERVICE ROWS (Truck Wash / Truck Stop) */
+  .service-group{margin-bottom:var(--space-3);}
+  .service-group .glabel{font-size:14px; font-weight:700; color:var(--asphalt); margin-bottom:var(--space-2);}
+  .chips{display:flex; flex-direction:column; gap:var(--space-2);}
+  .specify-input{
+    border:1.5px solid var(--concrete-line);
+    border-radius:var(--radius-sm);
+    padding:var(--space-1) var(--space-2);
+    font-family:'Barlow', sans-serif;
+    font-size:13px;
+    width:130px;
+    background:var(--paper);
+    color:var(--asphalt);
+  }
+  .tier-block{
+    border:1.5px solid var(--concrete-line);
+    border-radius:var(--radius-md);
+    padding:var(--space-3);
+    background:var(--concrete);
+    display:flex;
+    align-items:center;
+    justify-content:space-between;
+    gap:var(--space-3);
+    transition:background 0.12s, border-color 0.12s;
+  }
+  .tier-left{flex:1; min-width:0;}
+  .tier-block--clickable{cursor:pointer;}
+  .service-row{display:flex; gap:var(--space-2);}
+  .service-row .tier-block{margin-bottom:0;}
+  .tier-block--pair{
+    flex:1;
+    min-width:0;
+    padding:var(--space-2) var(--space-3);
+  }
+  .tier-block--pair .tier-title{font-size:14px; margin-bottom:var(--space-1);}
+  @media (max-width:400px){
+    .service-row{flex-direction:column;}
+  }
+  .tier-block .tier-title{font-size:15px; font-weight:600; margin-bottom:var(--space-2);}
+  .tier-block.active{
+    background:var(--asphalt);
+    border-color:var(--asphalt);
+  }
+  .tier-block.active .tier-title{color:var(--concrete);}
+  .tier-hint{
+    font-size:13px;
+    color:var(--muted-soft);
+    font-style:italic;
+  }
+  .tier-block.active .tier-hint{color:#C9C4BA;}
+  .custom-inputs{display:flex; align-items:center; gap:var(--space-2); flex-wrap:wrap;}
+  .price-inline{
+    display:flex; align-items:center;
+    font-family:'IBM Plex Mono', monospace;
+    font-size:15px;
+    font-weight:700;
+    color:var(--amber);
+  }
+  .tier-block:not(.active) .price-inline{color:var(--asphalt);}
+  .price-inline input{
+    width:60px;
+    border:none;
+    background:transparent;
+    font-family:'IBM Plex Mono', monospace;
+    font-size:15px;
+    font-weight:700;
+    color:inherit;
+    padding:0;
+  }
+  .price-inline input:focus{outline:none;}
+  .tier-options{display:flex; gap:var(--space-2); flex-wrap:wrap;}
+  .tier-btn{
+    border:1.5px solid var(--concrete-line);
+    background:var(--paper);
+    border-radius:var(--radius-pill);
+    padding:var(--space-2) var(--space-4);
+    font-size:14px;
+    font-weight:700;
+    font-family:'IBM Plex Mono', monospace;
+    cursor:pointer;
+    color:var(--asphalt);
+    transition:background 0.12s, border-color 0.12s;
+  }
+  .tier-btn.active{
+    background:var(--amber);
+    border-color:var(--amber);
+    color:var(--asphalt);
+  }
+  .tier-block.active .tier-btn:not(.active){
+    background:transparent;
+    border-color:#4A4F57;
+    color:#C9C4BA;
+  }
+
+  /* PAYMENT */
+  .pay-chips{display:flex; flex-wrap:wrap; gap:var(--space-2);}
+  .pay-chip{
+    border:1.5px solid var(--concrete-line);
+    background:var(--concrete);
+    border-radius:var(--radius-md);
+    padding:var(--space-3) var(--space-3);
+    font-weight:700;
+    font-size:14px;
+    text-transform:uppercase;
+    letter-spacing:0.03em;
+    cursor:pointer;
+    flex:1 1 auto;
+    text-align:center;
+    min-width:90px;
+    transition:background 0.12s, border-color 0.12s;
+  }
+  .pay-chip.active{
+    background:var(--steel);
+    border-color:var(--steel);
+    color:white;
+  }
+
+  /* TOTAL BAR */
+  .totalbar{
+    position:fixed;
+    left:0; right:0; bottom:0;
+    background:var(--asphalt);
+    color:var(--concrete);
+    padding:var(--space-4);
+    display:flex; align-items:center; justify-content:space-between;
+    gap:var(--space-3);
+    box-shadow:0 -4px 14px rgba(0,0,0,0.2);
+    z-index:50;
+  }
+  .qty-stepper{
+    display:flex; flex-direction:column; align-items:center; gap:3px;
+    flex-shrink:0;
+  }
+  .qty-stepper .qbtn{
+    width:26px; height:22px;
+    border-radius:var(--radius-sm);
+    border:1.5px solid #454B54;
+    background:var(--asphalt-soft);
+    color:var(--amber);
+    font-size:14px;
+    font-weight:700;
+    line-height:1;
+    cursor:pointer;
+    display:flex; align-items:center; justify-content:center;
+  }
+  .tier-block:not(.active) .qty-stepper .qbtn,
+  .chip:not(.active) .qty-stepper .qbtn{
+    background:var(--paper);
+    color:var(--asphalt);
+    border-color:var(--concrete-line);
+  }
+  .qty-stepper .qval{
+    font-family:'IBM Plex Mono', monospace;
+    font-size:15px;
+    font-weight:700;
+    min-width:16px;
+    text-align:center;
+    line-height:1;
+    color:var(--amber);
+  }
+  .tier-block:not(.active) .qty-stepper .qval,
+  .chip:not(.active) .qty-stepper .qval{
+    color:var(--asphalt);
+  }
+  .qty-stepper .qlabel{
+    font-size:9px;
+    letter-spacing:0.08em;
+    text-transform:uppercase;
+    opacity:0.7;
+  }
+  .totalbar .tot-label{font-size:11px; letter-spacing:0.12em; text-transform:uppercase; color:#A9A297;}
+  .totalbar .tot-amt{font-family:'IBM Plex Mono', monospace; font-size:26px; font-weight:600; color:var(--amber);}
+  .savebtn{
+    background:var(--go);
+    color:white;
+    border:none;
+    border-radius:var(--radius-md);
+    padding:var(--space-3) var(--space-5);
+    font-size:16px;
+    font-weight:700;
+    text-transform:uppercase;
+    letter-spacing:0.04em;
+    cursor:pointer;
+    transition:transform 0.08s, filter 0.12s;
+  }
+  .savebtn:active{transform:translateY(1px); filter:brightness(0.95);}
+
+  /* ORDERS LOG */
+  .logrow{
+    display:flex; justify-content:space-between; align-items:center;
+    padding:var(--space-2) var(--space-1); border-bottom:1px solid var(--concrete-line); font-size:14px;
+    cursor:pointer;
+    border-radius:var(--radius-sm);
+    transition:background 0.12s;
+  }
+  .logrow:active{background:var(--concrete);}
+  .logrow:last-child{border-bottom:none;}
+  .logrow .lname{font-weight:700;}
+  .sync-badge{font-size:12px; font-weight:400; margin-left:2px;}
+  .sync-ok{color:var(--go);}
+  .sync-fail{color:var(--stop); cursor:help;}
+  .sync-pending{color:var(--muted-soft);}
+  .logrow .lmeta{font-size:12px; color:var(--muted);}
+  .logrow .lamt{font-family:'IBM Plex Mono', monospace; font-weight:600;}
+  .empty-log{color:var(--muted-soft); font-size:14px; text-align:center; padding:var(--space-4) 0;}
+
+  .toolbtn{
+    background:var(--concrete);
+    border:1.5px solid var(--concrete-line);
+    border-radius:var(--radius-md);
+    padding:var(--space-2) var(--space-3);
+    font-weight:700;
+    font-size:13px;
+    text-transform:uppercase;
+    letter-spacing:0.04em;
+    cursor:pointer;
+    color:var(--asphalt);
+    transition:background 0.12s;
+  }
+  .toolbtn:active{background:var(--concrete-line);}
+  .toolrow{display:flex; gap:var(--space-2); margin-top:var(--space-3); flex-wrap:wrap;}
+  .toolrow .toolbtn{flex:1 1 auto;}
+
+  .note{
+    background:var(--amber-tint);
+    border:1px solid #F0DBA0;
+    border-radius:var(--radius-md);
+    padding:var(--space-3);
+    font-size:13px;
+    color:#7A5C10;
+    margin-bottom:var(--space-4);
+  }
+
+  .edit-banner{
+    display:none;
+    align-items:center;
+    justify-content:space-between;
+    gap:var(--space-3);
+    background:var(--asphalt);
+    color:var(--concrete);
+    border-radius:var(--radius-md);
+    padding:var(--space-3);
+    margin-bottom:var(--space-4);
+  }
+  .edit-banner-text{font-size:14px; font-weight:700;}
+  .edit-banner-cancel{
+    background:var(--stop);
+    border:none;
+    color:white;
+    font-weight:700;
+    font-size:12px;
+    text-transform:uppercase;
+    letter-spacing:0.04em;
+    border-radius:var(--radius-sm);
+    padding:var(--space-2) var(--space-3);
+    cursor:pointer;
+  }
+  .log-hint{
+    font-size:12px;
+    color:var(--muted-soft);
+    margin-bottom:var(--space-2);
+    font-style:italic;
+  }
+
+  .sig-wrap{
+    position:relative;
+    border:1.5px dashed var(--concrete-line);
+    border-radius:var(--radius-md);
+    background:var(--concrete);
+    overflow:hidden;
+    transition:border-color 0.15s;
+  }
+  .sig-wrap.locked{
+    border:1.5px solid var(--go);
+  }
+  .sig-canvas{
+    display:block;
+    width:100%;
+    height:160px;
+    touch-action:none;
+    background:var(--paper);
+  }
+  .sig-wrap.locked .sig-canvas{
+    background:#F3F9F5;
+    opacity:0.85;
+  }
+  .sig-hint{
+    position:absolute;
+    bottom:var(--space-2); left:var(--space-3);
+    font-size:12px;
+    color:var(--muted-soft);
+    letter-spacing:0.04em;
+    text-transform:uppercase;
+    pointer-events:none;
+  }
+  .sig-locked-badge{
+    display:none;
+    position:absolute;
+    top:var(--space-2); right:var(--space-2);
+    background:var(--go);
+    color:white;
+    font-size:11px;
+    font-weight:700;
+    letter-spacing:0.04em;
+    text-transform:uppercase;
+    padding:var(--space-1) var(--space-2);
+    border-radius:var(--radius-sm);
+    pointer-events:none;
+  }
+  .sig-wrap.locked .sig-locked-badge{display:block;}
+  .toolbtn--save{
+    background:var(--go);
+    border-color:var(--go);
+    color:white;
+  }
+  .toolbtn--save:disabled{
+    background:var(--concrete-line);
+    border-color:var(--concrete-line);
+    color:var(--muted);
+    cursor:default;
+  }
+
+  ::placeholder{color:var(--muted-soft);}
+</style>
+</head>
+<body>
+
+<header>
+  <div class="brand-row">
+    <div class="brand">
+      <div class="name">Lapaside</div>
+      <div class="sub">Truck Wash &amp; Truck Stop</div>
+    </div>
+    <div class="stub">
+      <div class="label">Order No.</div>
+      <div class="num mono" id="orderNoDisplay">#00001</div>
+    </div>
+  </div>
+</header>
+
+<main>
+
+  <div class="note">Connected to your live Google Sheet. Every order you save here is stored permanently — this is no longer a session-only test.</div>
+
+  <div class="edit-banner" id="editBanner">
+    <span class="edit-banner-text">Editing Order</span>
+    <button type="button" class="edit-banner-cancel" onclick="cancelEdit()">Cancel</button>
+  </div>
+
+  <div class="card card--shift">
+    <h2><span class="dot"></span>Who's Working Today?</h2>
+    <div class="shift-chips" id="shiftChips"></div>
+    <div class="shift-hint">Sets who earns commission on every order saved today. Change this once at the start of the shift.</div>
+  </div>
+
+  <div class="card card--customer">
+    <h2 class="h2-with-action">
+      <span class="h2-title"><span class="dot"></span>Customer Details</span>
+      <span class="slip-field">
+        <label for="slipIn">Slip No.</label>
+        <input type="number" id="slipIn" min="1" max="100" placeholder="001" inputmode="numeric" oninput="clampSlipNo(this)">
+      </span>
+    </h2>
+    <div class="row2">
+      <div class="field">
+        <label for="dateIn">Date</label>
+        <input type="date" id="dateIn" onchange="refreshShiftForDate()">
+      </div>
+      <div class="field">
+        <label for="companyIn">Company Name</label>
+        <input type="text" id="companyIn" list="companyList">
+        <datalist id="companyList"></datalist>
+      </div>
+    </div>
+    <div class="row2">
+      <div class="field">
+        <label for="companyPhoneIn">Company Phone No.</label>
+        <input type="tel" id="companyPhoneIn">
+      </div>
+      <div class="field">
+        <label for="controllerIn">Controller Phone No.</label>
+        <input type="tel" id="controllerIn">
+      </div>
+    </div>
+
+    <div class="subheading">Driver &amp; Vehicle Details</div>
+    <div class="extra-vehicle-row primary-row">
+      <input type="text" id="driverIn" list="driverList" placeholder="Driver Name" oninput="capitalizeFirst(this)">
+      <datalist id="driverList"></datalist>
+      <input type="text" id="vehicleIn" list="vehicleList" placeholder="Type of Vehicle">
+      <datalist id="vehicleList"></datalist>
+      <input type="text" id="regIn" placeholder="Vehicle Reg No." oninput="uppercaseInput(this)">
+      <input type="text" id="fleetIn" placeholder="Fleet No.">
+    </div>
+
+    <div class="extra-vehicles" id="extraVehicles"></div>
+    <button type="button" class="addvehicle-btn" onclick="addExtraVehicle()">+ Add Another Vehicle</button>
+    <div class="row2">
+      <div class="field">
+        <label for="arriveIn">Time Arrived</label>
+        <input type="time" id="arriveIn">
+      </div>
+      <div class="field">
+        <label for="departIn">Time Departed</label>
+        <input type="time" id="departIn">
+      </div>
+    </div>
+  </div>
+
+  <div class="card card--wash">
+    <h2><span class="dot"></span>Truck Wash</h2>
+    <div class="service-group">
+      <div class="chips" id="washChips"></div>
+    </div>
+    <div class="subtotal-row">
+      <span>Wash Subtotal</span>
+      <span class="mono" id="washSubtotal">R 0.00</span>
+    </div>
+  </div>
+
+  <div class="card card--stop">
+    <h2><span class="dot"></span>Truck Stop</h2>
+    <div class="service-group">
+      <div class="chips" id="stopChips"></div>
+    </div>
+    <div class="subtotal-row">
+      <span>Stop Subtotal</span>
+      <span class="mono" id="stopSubtotal">R 0.00</span>
+    </div>
+  </div>
+
+  <div class="card card--payment">
+    <h2><span class="dot"></span>Payment Method</h2>
+    <div class="pay-chips" id="payChips"></div>
+  </div>
+
+  <div class="card card--signature">
+    <h2><span class="dot"></span>Driver Signature</h2>
+    <div class="sig-wrap" id="sigWrap">
+      <canvas id="sigCanvas" class="sig-canvas"></canvas>
+      <div class="sig-hint" id="sigHint">Sign here</div>
+      <div class="sig-locked-badge" id="sigLockedBadge">Signature Locked ✓</div>
+    </div>
+    <div class="toolrow">
+      <button class="toolbtn toolbtn--save" type="button" id="saveSigBtn" onclick="lockSignature()">Save Signature</button>
+      <button class="toolbtn" type="button" onclick="clearSignature()">Clear Signature</button>
+    </div>
+  </div>
+
+  <div class="card card--log">
+    <h2><span class="dot"></span>Today's Orders</h2>
+    <div class="log-hint">Tap an order to edit it</div>
+    <div id="logList"><div class="empty-log">No orders saved yet this session.</div></div>
+    <div class="toolrow">
+      <button class="toolbtn" onclick="exportCSV()">Export CSV</button>
+      <button class="toolbtn" onclick="exportXLSX()">Export XLSX</button>
+      <button class="toolbtn" onclick="clearLog()">Clear Log</button>
+    </div>
+  </div>
+
+</main>
+
+<div class="totalbar">
+  <div>
+    <div class="tot-label">Total</div>
+    <div class="tot-amt mono" id="totalAmt">R 0.00</div>
+  </div>
+  <button class="savebtn" onclick="saveOrder()"><span id="saveBtnLabel">Save Order</span></button>
+</div>
+
+<script>
+  // ---- Vocabulary (session memory — will become the live Sheet lookup) ----
+  let companies = ["Botha Transport", "Nkosi Logistics", "R25 Freight Co"];
+  let drivers = ["J. Nkosi", "P. Mahlangu", "S. Dlamini"];
+  let vehicleTypes = ["Horse & Trailer", "Tautliner", "Tanker", "Rigid", "Interlink"];
+
+  const washServices = [
+    {name:"Full Wash", tiers:[750,550,450]},
+    {name:"Bin Wash", tiers:[450,200,150]},
+    {name:"Sail Wash", tiers:[30]},
+    {name:"Aluminum Cleaner", tiers:[120]},
+    {name:"Other", price:0},
+  ];
+  const washLayout = [
+    ["Full Wash", "Bin Wash"],
+    ["Sail Wash", "Aluminum Cleaner"],
+    ["Other"],
+  ];
+  const stopServices = [
+    {name:"Overnight Truck", tiers:[150]},
+    {name:"Overnight Car", tiers:[50]},
+    {name:"Daystop & Refresh", tiers:[50]},
+    {name:"Other", price:0},
+  ];
+  const stopLayout = [
+    ["Overnight Truck", "Overnight Car", "Daystop & Refresh"],
+    ["Other"],
+  ];
+  const payMethods = ["Cash","Card","EFT","Fleet Card","Account","Other"];
+
+  // ---- Live backend (Google Sheet via Apps Script) ----
+  const BACKEND_URL = 'https://script.google.com/macros/s/AKfycbwi4TxGgzjgr7_ROVuQHwG-a8Uw9Zobu2nv_03qERBAb7OnmNDWlqx94I66aiTohbnaoA/exec';
+
+  async function postToBackend(action, order){
+    try {
+      const res = await fetch(BACKEND_URL, {
+        method: 'POST',
+        headers: {'Content-Type': 'text/plain;charset=utf-8'}, // avoids a CORS preflight Apps Script can't handle
+        body: JSON.stringify({action, order})
+      });
+      const data = await res.json();
+      return data.success === true;
+    } catch(err){
+      console.error('Backend sync failed:', err);
+      return false;
+    }
+  }
+
+  async function loadFromBackend(){
+    try {
+      const res = await fetch(`${BACKEND_URL}?action=getLookups`);
+      const data = await res.json();
+      if(data.success){
+        const d = data.data;
+        if(d.companies && d.companies.length) companies = [...new Set([...companies, ...d.companies])];
+        if(d.drivers && d.drivers.length) drivers = [...new Set([...drivers, ...d.drivers])];
+        if(d.vehicleTypes && d.vehicleTypes.length) vehicleTypes = [...new Set([...vehicleTypes, ...d.vehicleTypes])];
+        refreshLists();
+      }
+    } catch(err){ console.error('Could not load lookups from backend:', err); }
+
+    try {
+      const res = await fetch(`${BACKEND_URL}?action=nextOrderNo`);
+      const data = await res.json();
+      if(data.success && data.data){
+        const n = parseInt(String(data.data).replace(/\D/g,''), 10);
+        if(!isNaN(n) && n > 0){
+          orderCounter = n;
+          document.getElementById('orderNoDisplay').textContent = '#' + pad(orderCounter);
+        }
+      }
+    } catch(err){ console.error('Could not load next order number from backend:', err); }
+
+    try {
+      const today = document.getElementById('dateIn').value || new Date().toISOString().slice(0,10);
+      const res = await fetch(`${BACKEND_URL}?action=getShift&date=${today}`);
+      const data = await res.json();
+      if(data.success && data.data){
+        currentWorker = data.data;
+        renderShift();
+      }
+    } catch(err){ console.error('Could not load shift setting from backend:', err); }
+  }
+
+
+  let selectedWash = {};
+  let selectedStop = {};
+  let selectedPay = null;
+  let otherNote = {wash:'', stop:''};
+  let extraVehicles = [];
+  let orderCounter = 1;
+  let orders = [];
+  let editingIndex = null;
+  let lastSlipNo = null;
+  const shiftWorkers = ["Both","David","July","Other"];
+  let currentWorker = 'Both';
+
+  function refreshLists(){
+    document.getElementById('companyList').innerHTML = companies.map(c=>`<option value="${c}">`).join('');
+    document.getElementById('driverList').innerHTML = drivers.map(d=>`<option value="${d}">`).join('');
+    document.getElementById('vehicleList').innerHTML = vehicleTypes.map(v=>`<option value="${v}">`).join('');
+  }
+
+  function renderExtraVehicles(){
+    const el = document.getElementById('extraVehicles');
+    el.innerHTML = extraVehicles.map((v,i)=>`
+      <div class="extra-vehicle-row">
+        <input type="text" list="driverList" placeholder="Driver Name" value="${v.driver}" oninput="capitalizeFirst(this); updateExtraVehicle(${i},'driver',this.value)">
+        <input type="text" list="vehicleList" placeholder="Type of Vehicle" value="${v.type}" oninput="updateExtraVehicle(${i},'type',this.value)">
+        <input type="text" placeholder="Vehicle Reg No." value="${v.reg}" oninput="uppercaseInput(this); updateExtraVehicle(${i},'reg',this.value)">
+        <input type="text" placeholder="Fleet No." value="${v.fleet}" oninput="updateExtraVehicle(${i},'fleet',this.value)">
+        <div class="remove-vehicle-btn" onclick="removeExtraVehicle(${i})">&times;</div>
+      </div>
+    `).join('');
+  }
+
+  function addExtraVehicle(){
+    extraVehicles.push({driver:'', type:'', reg:'', fleet:''});
+    renderExtraVehicles();
+  }
+
+  function updateExtraVehicle(i, field, val){
+    extraVehicles[i][field] = val;
+  }
+
+  function removeExtraVehicle(i){
+    extraVehicles.splice(i,1);
+    renderExtraVehicles();
+  }
+
+  function renderChips(containerId, list, store){
+    const layout = containerId === 'washChips' ? washLayout : stopLayout;
+    const el = document.getElementById(containerId);
+    el.innerHTML = layout.map(row=>{
+      const items = row.map(name=>{
+        const s = list.find(x=>x.name===name);
+        return renderServiceItem(s, containerId, store, row.length > 1);
+      }).join('');
+      return row.length > 1 ? `<div class="service-row">${items}</div>` : items;
+    }).join('');
+  }
+
+  function renderServiceItem(s, containerId, store, compact){
+    const compactClass = compact ? ' tier-block--pair' : '';
+    if(s.tiers){
+      const entry = store[s.name];
+      const selectedVal = entry ? entry.price : undefined;
+      const active = selectedVal !== undefined;
+      const qty = entry ? entry.qty : 1;
+      return `<div class="tier-block${compactClass} ${active?'active':''}">
+        <div class="tier-left">
+          <div class="tier-title">${s.name}</div>
+          <div class="tier-options">
+            ${s.tiers.map(t=>`<div class="tier-btn ${selectedVal===t?'active':''}" onclick="toggleTier('${containerId}','${s.name}',${t})">R${t}</div>`).join('')}
+          </div>
+        </div>
+        ${active ? qtyStepperHtml(containerId, s.name, qty) : ''}
+      </div>`;
+    }
+    // custom/editable entry (Other): same boxed style, with an editable price + specify field
+    const entry = store[s.name];
+    const active = entry !== undefined;
+    const hasRealPrice = entry && entry.price !== 0;
+    const priceVal = hasRealPrice ? entry.price : '';
+    const qty = entry ? entry.qty : 1;
+    const priceInputId = `price-${containerId}-${s.name.replace(/\s+/g,'')}`;
+    const customContent = active
+      ? `<div class="custom-inputs">
+          <span class="price-inline">R<input type="number" id="${priceInputId}" inputmode="numeric" placeholder="0" value="${priceVal}" onclick="event.stopPropagation()" onfocus="this.select()" oninput="updatePrice(this,'${containerId}','${s.name}')"></span>
+          <input type="text" class="specify-input" placeholder="Specify" onclick="event.stopPropagation()" value="${otherNote[containerId==='washChips'?'wash':'stop']}" oninput="updateOtherNote(this,'${containerId}')">
+        </div>`
+      : `<div class="tier-hint">Tap to add a custom charge</div>`;
+    return `<div class="tier-block${compactClass} tier-block--clickable ${active?'active':''}" data-name="${s.name}" data-price-input="${priceInputId}" onclick="toggleChip(this,'${containerId}')">
+      <div class="tier-left">
+        <div class="tier-title">${s.name}</div>
+        ${customContent}
+      </div>
+      ${active ? qtyStepperHtml(containerId, s.name, qty) : ''}
+    </div>`;
+  }
+
+  function qtyStepperHtml(containerId, name, qty){
+    return `<div class="qty-stepper" onclick="event.stopPropagation()">
+      <div class="qbtn" onclick="changeServiceQty('${containerId}','${name}',1)">+</div>
+      <div class="qval mono">${qty}</div>
+      <div class="qbtn" onclick="changeServiceQty('${containerId}','${name}',-1)">&minus;</div>
+    </div>`;
+  }
+
+  function changeServiceQty(containerId, name, delta){
+    const store = containerId === 'washChips' ? selectedWash : selectedStop;
+    const list = containerId === 'washChips' ? washServices : stopServices;
+    if(store[name] === undefined) return;
+    store[name].qty = Math.max(1, store[name].qty + delta);
+    renderChips(containerId, list, store);
+    updateTotal();
+  }
+
+  function toggleChip(el, containerId){
+    const name = el.getAttribute('data-name');
+    const store = containerId === 'washChips' ? selectedWash : selectedStop;
+    const list = containerId === 'washChips' ? washServices : stopServices;
+    const svc = list.find(s=>s.name===name);
+    const activating = store[name] === undefined;
+    if(!activating){
+      delete store[name];
+    } else {
+      store[name] = {price: svc.price, qty: 1};
+    }
+    renderChips(containerId, list, store);
+    updateTotal();
+    if(activating){
+      const input = document.getElementById(`price-${containerId}-${name.replace(/\s+/g,'')}`);
+      if(input) input.focus();
+    }
+  }
+
+  function toggleTier(containerId, name, value){
+    const store = containerId === 'washChips' ? selectedWash : selectedStop;
+    const list = containerId === 'washChips' ? washServices : stopServices;
+    const entry = store[name];
+    if(entry && entry.price === value){
+      delete store[name]; // tap the same price again to deselect
+    } else {
+      store[name] = {price: value, qty: entry ? entry.qty : 1};
+    }
+    renderChips(containerId, list, store);
+    updateTotal();
+  }
+
+  function updatePrice(input, containerId, name){
+    const store = containerId === 'washChips' ? selectedWash : selectedStop;
+    const val = parseFloat(input.value) || 0;
+    const qty = store[name] ? store[name].qty : 1;
+    store[name] = {price: val, qty};
+    updateTotal();
+  }
+
+  function updateOtherNote(input, containerId){
+    const key = containerId === 'washChips' ? 'wash' : 'stop';
+    otherNote[key] = input.value;
+  }
+
+  function renderPay(){
+    const el = document.getElementById('payChips');
+    el.innerHTML = payMethods.map(p=>`<div class="pay-chip ${selectedPay===p?'active':''}" onclick="selectPay('${p}')">${p}</div>`).join('');
+  }
+  function selectPay(p){ selectedPay = p; renderPay(); }
+
+  function renderShift(){
+    const el = document.getElementById('shiftChips');
+    el.innerHTML = shiftWorkers.map(w=>`<div class="shift-chip ${currentWorker===w?'active':''}" onclick="selectWorker('${w}')">${w}</div>`).join('');
+  }
+  function selectWorker(w){
+    currentWorker = w;
+    renderShift();
+    const today = document.getElementById('dateIn').value || new Date().toISOString().slice(0,10);
+    fetch(BACKEND_URL, {
+      method: 'POST',
+      headers: {'Content-Type': 'text/plain;charset=utf-8'},
+      body: JSON.stringify({action: 'setShift', date: today, worker: w})
+    }).catch(err => console.error('Could not save shift setting:', err));
+  }
+
+  async function refreshShiftForDate(){
+    const date = document.getElementById('dateIn').value;
+    if(!date) return;
+    try {
+      const res = await fetch(`${BACKEND_URL}?action=getShift&date=${date}`);
+      const data = await res.json();
+      if(data.success && data.data){
+        currentWorker = data.data;
+        renderShift();
+      }
+    } catch(err){ console.error('Could not load shift setting for date:', err); }
+  }
+
+  function updateTotal(){
+    const wash = Object.values(selectedWash).reduce((a,v)=>a+(v.price*v.qty),0);
+    const stop = Object.values(selectedStop).reduce((a,v)=>a+(v.price*v.qty),0);
+    const total = wash + stop;
+    document.getElementById('washSubtotal').textContent = 'R ' + wash.toFixed(2);
+    document.getElementById('stopSubtotal').textContent = 'R ' + stop.toFixed(2);
+    document.getElementById('totalAmt').textContent = 'R ' + total.toFixed(2);
+    return total;
+  }
+
+  function pad(n){ return String(n).padStart(5,'0'); }
+
+  function clampSlipNo(input){
+    if(input.value === '') return;
+    let v = parseInt(input.value, 10);
+    if(isNaN(v)) { input.value = ''; return; }
+    v = Math.min(100, Math.max(1, v));
+    input.value = v;
+  }
+
+  function capitalizeFirst(input){
+    if(!input.value) return;
+    const start = input.selectionStart, end = input.selectionEnd;
+    input.value = input.value.charAt(0).toUpperCase() + input.value.slice(1);
+    input.setSelectionRange(start, end);
+  }
+
+  function uppercaseInput(input){
+    const start = input.selectionStart, end = input.selectionEnd;
+    input.value = input.value.toUpperCase();
+    input.setSelectionRange(start, end);
+  }
+
+  function saveOrder(){
+    const company = document.getElementById('companyIn').value.trim();
+    const driver = document.getElementById('driverIn').value.trim();
+    const vehicle = document.getElementById('vehicleIn').value.trim();
+
+    if(!company){ alert('Please enter a company name before saving.'); return; }
+    if(!selectedPay){ alert('Please select a payment method before saving.'); return; }
+
+    const total = updateTotal();
+    const slipRaw = document.getElementById('slipIn').value.trim();
+    const slipNo = slipRaw ? String(slipRaw).padStart(3,'0') : '';
+    const isEditing = editingIndex !== null;
+
+    const order = {
+      orderNo: isEditing ? orders[editingIndex].orderNo : pad(orderCounter),
+      date: document.getElementById('dateIn').value,
+      slipNo,
+      worker: currentWorker,
+      company, driver,
+      controller: document.getElementById('controllerIn').value.trim(),
+      companyPhone: document.getElementById('companyPhoneIn').value.trim(),
+      vehicle,
+      reg: document.getElementById('regIn').value.trim(),
+      fleet: document.getElementById('fleetIn').value.trim(),
+      extraVehicles: extraVehicles.filter(v=>v.reg || v.fleet || v.type || v.driver).map(v=>({...v})),
+      arrive: document.getElementById('arriveIn').value,
+      depart: document.getElementById('departIn').value,
+      wash: {...selectedWash},
+      stop: {...selectedStop},
+      washOtherNote: selectedWash["Other"] !== undefined ? otherNote.wash : '',
+      stopOtherNote: selectedStop["Other"] !== undefined ? otherNote.stop : '',
+      payment: selectedPay,
+      signature: getSignatureData(),
+      total,
+      synced: null // null = syncing, true = synced, false = sync failed
+    };
+
+    if(slipRaw) lastSlipNo = parseInt(slipRaw, 10);
+
+    // grow vocabulary
+    if(company && !companies.includes(company)) companies.push(company);
+    if(driver && !drivers.includes(driver)) drivers.push(driver);
+    if(vehicle && !vehicleTypes.includes(vehicle)) vehicleTypes.push(vehicle);
+    refreshLists();
+
+    let savedIndex;
+    if(isEditing){
+      orders[editingIndex] = order;
+      savedIndex = editingIndex;
+      editingIndex = null;
+    } else {
+      orders.unshift(order);
+      savedIndex = 0;
+      orderCounter++;
+      document.getElementById('orderNoDisplay').textContent = '#' + pad(orderCounter);
+    }
+
+    renderLog();
+    resetForm();
+
+    // Sync to the live Google Sheet in the background — UI already updated optimistically above
+    postToBackend(isEditing ? 'updateOrder' : 'saveOrder', order).then(success=>{
+      const target = orders.find(o=>o.orderNo === order.orderNo);
+      if(target){
+        target.synced = success;
+        renderLog();
+      }
+    });
+  }
+
+  function loadOrderForEdit(i){
+    const o = orders[i];
+    editingIndex = i;
+
+    document.getElementById('slipIn').value = o.slipNo ? parseInt(o.slipNo,10) : '';
+    document.getElementById('dateIn').value = o.date;
+    document.getElementById('companyIn').value = o.company;
+    document.getElementById('companyPhoneIn').value = o.companyPhone || '';
+    document.getElementById('controllerIn').value = o.controller || '';
+    document.getElementById('driverIn').value = o.driver || '';
+    document.getElementById('vehicleIn').value = o.vehicle || '';
+    document.getElementById('regIn').value = o.reg || '';
+    document.getElementById('fleetIn').value = o.fleet || '';
+    document.getElementById('arriveIn').value = o.arrive || '';
+    document.getElementById('departIn').value = o.depart || '';
+
+    extraVehicles = (o.extraVehicles || []).map(v=>({...v}));
+    renderExtraVehicles();
+
+    selectedWash = {};
+    Object.entries(o.wash || {}).forEach(([k,v])=>{ selectedWash[k] = {...v}; });
+    selectedStop = {};
+    Object.entries(o.stop || {}).forEach(([k,v])=>{ selectedStop[k] = {...v}; });
+    otherNote = {wash: o.washOtherNote || '', stop: o.stopOtherNote || ''};
+    renderChips('washChips', washServices, selectedWash);
+    renderChips('stopChips', stopServices, selectedStop);
+
+    selectedPay = o.payment || null;
+    renderPay();
+    updateTotal();
+
+    if(o.signature){
+      loadSignatureImage(o.signature);
+    } else {
+      clearSignature();
+    }
+
+    updateEditBanner();
+    window.scrollTo({top:0, behavior:'smooth'});
+  }
+
+  function cancelEdit(){
+    editingIndex = null;
+    resetForm();
+  }
+
+  function updateEditBanner(){
+    const banner = document.getElementById('editBanner');
+    const savebtn = document.getElementById('saveBtnLabel');
+    if(editingIndex !== null){
+      banner.style.display = 'flex';
+      banner.querySelector('.edit-banner-text').textContent = `Editing Order #${orders[editingIndex].orderNo}`;
+      savebtn.textContent = 'Update Order';
+    } else {
+      banner.style.display = 'none';
+      savebtn.textContent = 'Save Order';
+    }
+  }
+
+  function resetForm(){
+    document.getElementById('slipIn').value = nextSlipNo();
+    document.getElementById('companyIn').value='';
+    document.getElementById('driverIn').value='';
+    document.getElementById('controllerIn').value='';
+    document.getElementById('companyPhoneIn').value='';
+    document.getElementById('vehicleIn').value='';
+    document.getElementById('regIn').value='';
+    document.getElementById('fleetIn').value='';
+    extraVehicles = [];
+    renderExtraVehicles();
+    document.getElementById('arriveIn').value='';
+    document.getElementById('departIn').value='';
+    selectedWash = {}; selectedStop = {}; selectedPay = null;
+    otherNote = {wash:'', stop:''};
+    renderChips('washChips', washServices, selectedWash);
+    renderChips('stopChips', stopServices, selectedStop);
+    renderPay();
+    updateTotal();
+    clearSignature();
+    updateEditBanner();
+  }
+
+  function nextSlipNo(){
+    if(lastSlipNo === null) return '';
+    let next = lastSlipNo + 1;
+    if(next > 100) next = 1;
+    return next;
+  }
+
+  function syncBadge(o, i){
+    if(o.synced === true) return '<span class="sync-badge sync-ok" title="Saved to Google Sheet">☁</span>';
+    if(o.synced === false) return `<span class="sync-badge sync-fail" title="Not synced — tap to retry" onclick="event.stopPropagation(); retrySync(${i})">⚠ Retry</span>`;
+    return '<span class="sync-badge sync-pending" title="Syncing…">…</span>';
+  }
+
+  function retrySync(i){
+    const order = orders[i];
+    if(!order) return;
+    order.synced = null;
+    renderLog();
+    postToBackend('updateOrder', order).then(success=>{
+      order.synced = success;
+      renderLog();
+    });
+  }
+
+  function renderLog(){
+    const el = document.getElementById('logList');
+    if(orders.length===0){ el.innerHTML = '<div class="empty-log">No orders saved yet this session.</div>'; return; }
+    el.innerHTML = orders.map((o,i)=>`
+      <div class="logrow" onclick="loadOrderForEdit(${i})">
+        <div>
+          <div class="lname">${o.company} <span class="mono">#${o.orderNo}</span> ${syncBadge(o, i)}</div>
+          <div class="lmeta">${o.slipNo ? `Slip #${o.slipNo} · ` : ''}${o.worker ? `${o.worker} · ` : ''}${o.driver || '—'} · ${o.payment}${o.extraVehicles.length ? ` · ${o.extraVehicles.length+1} vehicles` : ''}${o.signature ? ' · Signed ✓' : ''}</div>
+        </div>
+        <div class="lamt">R ${o.total.toFixed(2)}</div>
+      </div>
+    `).join('');
+  }
+
+  function clearLog(){
+    if(confirm('Clear all orders from this session log? This cannot be undone.')){
+      orders = [];
+      if(editingIndex !== null) cancelEdit();
+      renderLog();
+    }
+  }
+
+  function buildExportData(){
+    const headers = ["Order No","Slip No","Date","Worker","Company","Company Phone No","Driver","Controller Phone No","Vehicle","Reg No","Fleet No","Additional Vehicles","Arrived","Departed","Wash Services","Wash Other Note","Stop Services","Stop Other Note","Payment","Signed","Total"];
+    const rows = orders.map(o=>[
+      o.orderNo, o.slipNo, o.date, o.worker || 'Both', o.company, o.companyPhone, o.driver, o.controller, o.vehicle, o.reg, o.fleet,
+      o.extraVehicles.map(v=>`${v.driver?v.driver+' — ':''}${v.type||'Vehicle'}: ${v.reg||'—'}${v.fleet?` (Fleet ${v.fleet})`:''}`).join('; '),
+      o.arrive, o.depart,
+      Object.entries(o.wash).map(([k,v])=>`${k} x${v.qty}(R${v.price})`).join('; '),
+      o.washOtherNote,
+      Object.entries(o.stop).map(([k,v])=>`${k} x${v.qty}(R${v.price})`).join('; '),
+      o.stopOtherNote,
+      o.payment, o.signature ? 'Yes' : 'No', Number(o.total.toFixed(2))
+    ]);
+    return {headers, rows};
+  }
+
+  function exportCSV(){
+    if(orders.length===0){ alert('No orders to export yet.'); return; }
+    const {headers, rows} = buildExportData();
+    const csv = [headers, ...rows].map(r=>r.map(v=>`"${String(v??'').replace(/"/g,'""')}"`).join(',')).join('\n');
+    const blob = new Blob([csv], {type:'text/csv'});
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `lapaside_orders_${new Date().toISOString().slice(0,10)}.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
+  }
+
+  function exportXLSX(){
+    if(orders.length===0){ alert('No orders to export yet.'); return; }
+    if(typeof XLSX === 'undefined'){ alert('Excel export library did not load. Check your internet connection and try again.'); return; }
+    const {headers, rows} = buildExportData();
+    const ws = XLSX.utils.aoa_to_sheet([headers, ...rows]);
+    ws['!cols'] = headers.map(h => ({wch: Math.max(10, h.length + 2)}));
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, 'Orders');
+    XLSX.writeFile(wb, `lapaside_orders_${new Date().toISOString().slice(0,10)}.xlsx`);
+  }
+
+  // ---- Signature pad ----
+  let sigCtx, sigDrawing = false, sigHasStrokes = false, sigLocked = false;
+
+  function setupSignaturePad(){
+    const canvas = document.getElementById('sigCanvas');
+    const hint = document.getElementById('sigHint');
+    const ratio = window.devicePixelRatio || 1;
+
+    function resizeCanvas(){
+      const rect = canvas.getBoundingClientRect();
+      canvas.width = rect.width * ratio;
+      canvas.height = rect.height * ratio;
+      sigCtx = canvas.getContext('2d');
+      if(!sigCtx) return;
+      sigCtx.scale(ratio, ratio);
+      sigCtx.lineWidth = 2.4;
+      sigCtx.lineCap = 'round';
+      sigCtx.lineJoin = 'round';
+      sigCtx.strokeStyle = '#1E2226';
+    }
+    resizeCanvas();
+    window.addEventListener('resize', resizeCanvas);
+
+    function pos(e){
+      const rect = canvas.getBoundingClientRect();
+      return {x: e.clientX - rect.left, y: e.clientY - rect.top};
+    }
+
+    canvas.addEventListener('pointerdown', e=>{
+      if(sigLocked) return;
+      sigDrawing = true;
+      sigHasStrokes = true;
+      hint.style.display = 'none';
+      const p = pos(e);
+      sigCtx.beginPath();
+      sigCtx.moveTo(p.x, p.y);
+      canvas.setPointerCapture(e.pointerId);
+    });
+    canvas.addEventListener('pointermove', e=>{
+      if(!sigDrawing || sigLocked) return;
+      const p = pos(e);
+      sigCtx.lineTo(p.x, p.y);
+      sigCtx.stroke();
+    });
+    canvas.addEventListener('pointerup', ()=>{ sigDrawing = false; });
+    canvas.addEventListener('pointerleave', ()=>{ sigDrawing = false; });
+  }
+
+  function lockSignature(){
+    if(!sigHasStrokes){ alert('Please sign before saving the signature.'); return; }
+    sigLocked = true;
+    updateSignatureLockUI();
+  }
+
+  function updateSignatureLockUI(){
+    document.getElementById('sigWrap').classList.toggle('locked', sigLocked);
+    document.getElementById('saveSigBtn').disabled = sigLocked;
+    document.getElementById('sigCanvas').style.touchAction = sigLocked ? 'auto' : 'none';
+  }
+
+  function clearSignature(){
+    const canvas = document.getElementById('sigCanvas');
+    if(sigCtx) sigCtx.clearRect(0, 0, canvas.width, canvas.height);
+    sigHasStrokes = false;
+    sigLocked = false;
+    document.getElementById('sigHint').style.display = 'block';
+    updateSignatureLockUI();
+  }
+
+  function getSignatureData(){
+    return sigHasStrokes ? document.getElementById('sigCanvas').toDataURL('image/png') : null;
+  }
+
+  function loadSignatureImage(dataUrl){
+    const canvas = document.getElementById('sigCanvas');
+    if(!sigCtx){ return; }
+    const img = new Image();
+    img.onload = function(){
+      sigCtx.clearRect(0, 0, canvas.width, canvas.height);
+      const ratio = window.devicePixelRatio || 1;
+      sigCtx.drawImage(img, 0, 0, canvas.width / ratio, canvas.height / ratio);
+      sigHasStrokes = true;
+      sigLocked = true;
+      document.getElementById('sigHint').style.display = 'none';
+      updateSignatureLockUI();
+    };
+    img.src = dataUrl;
+  }
+
+  // init
+  document.getElementById('dateIn').valueAsDate = new Date();
+  document.getElementById('orderNoDisplay').textContent = '#' + pad(orderCounter);
+  refreshLists();
+  renderChips('washChips', washServices, selectedWash);
+  renderChips('stopChips', stopServices, selectedStop);
+  renderPay();
+  renderShift();
+  setupSignaturePad();
+  loadFromBackend();
+</script>
+
+</body>
+</html>
