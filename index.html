@@ -22,6 +22,7 @@
     --plum:#6E4C9E;
     --teal:#1E8A8C;
     --copper:#B5651D;
+    --indigo:#4C51BF;
     --paper:#FFFFFF;
     --muted:#847C6E;
     --muted-soft:#B4AC9E;
@@ -119,6 +120,12 @@
   .card--log h2 .dot{background:var(--teal);}
   .card--shift{border-left-color:var(--copper);}
   .card--shift h2 .dot{background:var(--copper);}
+  .card--recall{border-left-color:var(--indigo);}
+  .card--recall h2 .dot{background:var(--indigo);}
+  .recall-presets{display:flex; gap:var(--space-2); margin-bottom:var(--space-3);}
+  .recall-presets .toolbtn{flex:1;}
+  .recall-results{margin-top:var(--space-3);}
+  .recall-results .logrow{border-bottom:1px solid var(--concrete-line);}
   .shift-chips{display:flex; flex-wrap:wrap; gap:var(--space-2);}
   .shift-chip{
     flex:1 1 auto;
@@ -827,6 +834,32 @@
     </div>
   </div>
 
+  <div class="card card--recall">
+    <h2><span class="dot"></span>Recall Past Orders</h2>
+    <div class="log-hint">Find an old order to review, edit, or add another day's charge to (e.g. long-stay Overnight trucks)</div>
+    <div class="recall-presets">
+      <button class="toolbtn" onclick="recallPreset('today')">Today</button>
+      <button class="toolbtn" onclick="recallPreset('week')">This Week</button>
+      <button class="toolbtn" onclick="recallPreset('month')">This Month</button>
+    </div>
+    <div class="row2">
+      <div class="field">
+        <label for="recallFrom">From</label>
+        <input type="date" id="recallFrom">
+      </div>
+      <div class="field">
+        <label for="recallTo">To</label>
+        <input type="date" id="recallTo">
+      </div>
+    </div>
+    <div class="field">
+      <label for="recallQuery">Search Company / Reg No. / Driver (optional)</label>
+      <input type="text" id="recallQuery" placeholder="e.g. Botha Transport">
+    </div>
+    <button class="toolbtn toolbtn--save" onclick="searchOrdersGated()">Search</button>
+    <div id="recallResults" class="recall-results"></div>
+  </div>
+
 </main>
 
 <div class="admin-gate" id="adminGate">
@@ -904,6 +937,149 @@
       console.error('Backend sync failed:', err);
       return false;
     }
+  }
+
+  function dateKey(v){ return String(v).slice(0,10); } // handles both "2026-08-14" and ISO-with-time strings
+
+  function parseServiceStringToObj(str){
+    const obj = {};
+    if(!str) return obj;
+    str.split(';').map(s=>s.trim()).filter(Boolean).forEach(part=>{
+      const m = part.match(/^(.+?)\s+x(\d+)\(R([\d.]+)\)$/);
+      if(m) obj[m[1]] = {price: parseFloat(m[3]), qty: parseInt(m[2],10)};
+    });
+    return obj;
+  }
+
+  // Additional-vehicle sub-fields (driver/type/reg/fleet) aren't individually recoverable
+  // from the flattened display text — this restores the correct count so "+N vehicles"
+  // shows accurately, but a restored order's extra-vehicle detail fields will show blank if edited.
+  function parseExtraVehiclesDisplay(str){
+    if(!str) return [];
+    return str.split(';').map(s=>s.trim()).filter(Boolean).map(()=>({driver:'',type:'',reg:'',fleet:''}));
+  }
+
+  function parseFetchedOrder(o){
+    return {
+      orderNo: String(o['Order No']),
+      slipNo: o['Slip No'] ? String(o['Slip No']) : '',
+      date: dateKey(o['Date']),
+      worker: o['Worker'] || 'Both',
+      company: o['Company'] || '',
+      companyPhone: o['Company Phone No'] || '',
+      driver: o['Driver'] || '',
+      controller: o['Controller Phone No'] || '',
+      vehicle: o['Vehicle'] || '',
+      reg: o['Reg No'] || '',
+      fleet: o['Fleet No'] || '',
+      extraVehicles: parseExtraVehiclesDisplay(o['Additional Vehicles']),
+      arrive: o['Arrived'] || '',
+      depart: o['Departed'] || '',
+      wash: parseServiceStringToObj(o['Wash Services']),
+      stop: parseServiceStringToObj(o['Stop Services']),
+      washOtherNote: o['Wash Other Note'] || '',
+      stopOtherNote: o['Stop Other Note'] || '',
+      payment: o['Payment'] || '',
+      signature: null, // not stored server-side — reprinting a restored/recalled order won't include the signature image
+      total: Number(o['Total']) || 0,
+      synced: true
+    };
+  }
+
+  function normalizeOrderNoFrontend(v){ return parseInt(String(v).replace(/\D/g,''), 10); }
+
+  async function loadTodaysOrders(){
+    try {
+      const res = await fetch(`${BACKEND_URL}?action=getOrders`);
+      const data = await res.json();
+      if(!data.success || !Array.isArray(data.data)) return;
+      const today = document.getElementById('dateIn').value || new Date().toISOString().slice(0,10);
+      const todays = data.data.filter(o => dateKey(o['Date']) === today);
+
+      orders = todays.reverse().map(parseFetchedOrder);
+
+      renderLog();
+    } catch(err){ console.error('Could not load today\'s orders from backend:', err); }
+  }
+
+  function recallPreset(preset){
+    const today = new Date();
+    const from = new Date(today);
+    if(preset === 'week'){
+      const day = today.getDay();
+      const diffToMonday = (day === 0 ? 6 : day - 1);
+      from.setDate(today.getDate() - diffToMonday);
+    } else if(preset === 'month'){
+      from.setDate(1);
+    }
+    document.getElementById('recallFrom').value = from.toISOString().slice(0,10);
+    document.getElementById('recallTo').value = today.toISOString().slice(0,10);
+    searchOrdersGated();
+  }
+
+  function searchOrdersGated(){
+    requireAdmin(searchOrders);
+  }
+
+  let recallResultsCache = [];
+
+  async function searchOrders(){
+    const from = document.getElementById('recallFrom').value;
+    const to = document.getElementById('recallTo').value;
+    const query = document.getElementById('recallQuery').value.trim().toLowerCase();
+    const el = document.getElementById('recallResults');
+
+    if(!from || !to){ alert('Please select a From and To date.'); return; }
+
+    el.innerHTML = '<div class="empty-log">Searching…</div>';
+    try {
+      const res = await fetch(`${BACKEND_URL}?action=getOrders`);
+      const data = await res.json();
+      if(!data.success || !Array.isArray(data.data)){
+        el.innerHTML = '<div class="empty-log">Could not load orders.</div>';
+        return;
+      }
+      let results = data.data.map(parseFetchedOrder).filter(o => o.date >= from && o.date <= to);
+      if(query){
+        results = results.filter(o =>
+          (o.company||'').toLowerCase().includes(query) ||
+          (o.reg||'').toLowerCase().includes(query) ||
+          (o.driver||'').toLowerCase().includes(query)
+        );
+      }
+      results.sort((a,b) => a.date < b.date ? 1 : (a.date > b.date ? -1 : 0));
+
+      if(results.length === 0){
+        el.innerHTML = '<div class="empty-log">No orders found in that range.</div>';
+        return;
+      }
+      recallResultsCache = results;
+      el.innerHTML = results.map((o,i) => `
+        <div class="logrow" onclick="recallOrder(${i})">
+          <div>
+            <div class="lname">${o.company || '—'} <span class="mono">#${o.orderNo}</span></div>
+            <div class="lmeta">${o.date} · ${o.driver || '—'} · ${o.payment || '—'}</div>
+          </div>
+          <div class="lamt">R ${o.total.toFixed(2)}</div>
+        </div>
+      `).join('');
+    } catch(err){
+      console.error('Order search failed:', err);
+      el.innerHTML = '<div class="empty-log">Search failed — check your connection.</div>';
+    }
+  }
+
+  function recallOrder(i){
+    const o = recallResultsCache[i];
+    if(!o) return;
+    let idx = orders.findIndex(x => normalizeOrderNoFrontend(x.orderNo) === normalizeOrderNoFrontend(o.orderNo));
+    if(idx === -1){
+      orders.unshift(o);
+      idx = 0;
+      renderLog();
+    }
+    loadOrderForEdit(idx);
+    window.scrollTo({top:0, behavior:'smooth'});
   }
 
   async function loadFromBackend(){
@@ -1601,6 +1777,7 @@
   renderShift();
   setupSignaturePad();
   loadFromBackend();
+  loadTodaysOrders();
 </script>
 
 </body>
