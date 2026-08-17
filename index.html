@@ -753,8 +753,8 @@
         <input type="tel" id="companyPhoneIn">
       </div>
       <div class="field">
-        <label for="controllerIn">Controller Phone No.</label>
-        <input type="tel" id="controllerIn">
+        <label for="customOrderNoIn">Custom Order No</label>
+        <input type="text" id="customOrderNoIn">
       </div>
     </div>
 
@@ -988,7 +988,7 @@
       company: o['Company'] || '',
       companyPhone: o['Company Phone No'] || '',
       driver: o['Driver'] || '',
-      controller: o['Controller Phone No'] || '',
+      customOrderNo: o['Custom Order No'] || '',
       vehicle: o['Vehicle'] || '',
       reg: o['Reg No'] || '',
       fleet: o['Fleet No'] || '',
@@ -1439,7 +1439,7 @@
       slipNo,
       worker: currentWorker,
       company, driver,
-      controller: document.getElementById('controllerIn').value.trim(),
+      customOrderNo: document.getElementById('customOrderNoIn').value.trim(),
       companyPhone: document.getElementById('companyPhoneIn').value.trim(),
       vehicle,
       reg: document.getElementById('regIn').value.trim(),
@@ -1527,7 +1527,7 @@
     document.getElementById('dateIn').value = o.date;
     document.getElementById('companyIn').value = o.company;
     document.getElementById('companyPhoneIn').value = o.companyPhone || '';
-    document.getElementById('controllerIn').value = o.controller || '';
+    document.getElementById('customOrderNoIn').value = o.customOrderNo || '';
     document.getElementById('driverIn').value = o.driver || '';
     document.getElementById('vehicleIn').value = o.vehicle || '';
     document.getElementById('regIn').value = o.reg || '';
@@ -1582,7 +1582,7 @@
     document.getElementById('slipIn').value = nextSlipNo();
     document.getElementById('companyIn').value='';
     document.getElementById('driverIn').value='';
-    document.getElementById('controllerIn').value='';
+    document.getElementById('customOrderNoIn').value='';
     document.getElementById('companyPhoneIn').value='';
     document.getElementById('vehicleIn').value='';
     document.getElementById('regIn').value='';
@@ -1702,9 +1702,9 @@
   }
 
   function buildExportData(){
-    const headers = ["Order No","Slip No","Date","Worker","Company","Company Phone No","Driver","Controller Phone No","Vehicle","Reg No","Fleet No","Additional Vehicles","Arrived","Departed","Wash Services","Wash Other Note","Stop Services","Stop Other Note","Payment","Signed","Total"];
+    const headers = ["Order No","Slip No","Date","Worker","Company","Company Phone No","Driver","Custom Order No","Vehicle","Reg No","Fleet No","Additional Vehicles","Arrived","Departed","Wash Services","Wash Other Note","Stop Services","Stop Other Note","Payment","Signed","Total"];
     const rows = orders.map(o=>[
-      o.orderNo, o.slipNo, o.date, o.worker || 'Both', o.company, o.companyPhone, o.driver, o.controller, o.vehicle, o.reg, o.fleet,
+      o.orderNo, o.slipNo, o.date, o.worker || 'Both', o.company, o.companyPhone, o.driver, o.customOrderNo, o.vehicle, o.reg, o.fleet,
       o.extraVehicles.map(v=>`${v.driver?v.driver+' — ':''}${v.type||'Vehicle'}: ${v.reg||'—'}${v.fleet?` (Fleet ${v.fleet})`:''}`).join('; '),
       o.arrive, o.depart,
       Object.entries(o.wash).map(([k,v])=>`${k} x${v.qty}(R${v.price})`).join('; '),
