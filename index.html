@@ -827,11 +827,6 @@
     <h2><span class="dot"></span>Today's Orders</h2>
     <div class="log-hint">Tap an order to edit it</div>
     <div id="logList"><div class="empty-log">No orders saved yet this session.</div></div>
-    <div class="toolrow">
-      <button class="toolbtn" onclick="exportCSV()">Export CSV</button>
-      <button class="toolbtn" onclick="exportXLSX()">Export XLSX</button>
-      <button class="toolbtn" onclick="clearLog()">Clear Log</button>
-    </div>
   </div>
 
   <div class="card card--recall">
@@ -856,7 +851,7 @@
       <label for="recallQuery">Search Company / Reg No. / Driver (optional)</label>
       <input type="text" id="recallQuery" placeholder="e.g. Botha Transport">
     </div>
-    <button class="toolbtn toolbtn--save" onclick="searchOrdersGated()">Search</button>
+    <button class="toolbtn toolbtn--save" onclick="searchOrders()">Search</button>
     <div id="recallResults" class="recall-results"></div>
   </div>
 
@@ -920,6 +915,32 @@
   // editing this one line.
   const ADMIN_PIN = '2468';
   let pendingAdminAction = null;
+
+  // ---- Local persistent cache ----
+  // Saves the current order list to the browser's own storage, independent of
+  // internet access. This is what protects orders if the tablet has no signal
+  // when Save Order is tapped — the order still survives an app close, kiosk
+  // memory clear, or full restart, and syncs to the Sheet automatically once
+  // connectivity returns.
+  const ORDERS_CACHE_KEY = 'lapaside_orders_cache';
+
+  function saveOrdersCache(){
+    try { localStorage.setItem(ORDERS_CACHE_KEY, JSON.stringify(orders)); }
+    catch(e){ console.error('Could not cache orders locally:', e); }
+  }
+
+  function loadOrdersCache(){
+    try {
+      const raw = localStorage.getItem(ORDERS_CACHE_KEY);
+      if(raw) orders = JSON.parse(raw);
+    } catch(e){ console.error('Could not load cached orders:', e); }
+  }
+
+  function retryAllUnsynced(){
+    orders.forEach((o,i) => { if(o.synced !== true) retrySync(i); });
+  }
+
+  window.addEventListener('online', retryAllUnsynced);
 
   // ---- Live backend (Google Sheet via Apps Script) ----
   const BACKEND_URL = 'https://script.google.com/macros/s/AKfycbwi4TxGgzjgr7_ROVuQHwG-a8Uw9Zobu2nv_03qERBAb7OnmNDWlqx94I66aiTohbnaoA/exec';
@@ -994,10 +1015,22 @@
       const data = await res.json();
       if(!data.success || !Array.isArray(data.data)) return;
       const today = document.getElementById('dateIn').value || new Date().toISOString().slice(0,10);
-      const todays = data.data.filter(o => dateKey(o['Date']) === today);
+      const todaysFromBackend = data.data.filter(o => dateKey(o['Date']) === today).reverse().map(parseFetchedOrder);
 
-      orders = todays.reverse().map(parseFetchedOrder);
+      // Backend doesn't store signature images — carry over any we already have locally
+      todaysFromBackend.forEach(t => {
+        const existing = orders.find(o => normalizeOrderNoFrontend(o.orderNo) === normalizeOrderNoFrontend(t.orderNo));
+        if(existing && existing.signature) t.signature = existing.signature;
+      });
 
+      // Keep any locally-saved orders that haven't synced yet and aren't in the backend results yet
+      // (e.g. saved while offline) — don't let a backend refresh silently drop them
+      const stillPending = orders.filter(o =>
+        o.synced !== true && o.date === today &&
+        !todaysFromBackend.some(t => normalizeOrderNoFrontend(t.orderNo) === normalizeOrderNoFrontend(o.orderNo))
+      );
+
+      orders = [...stillPending, ...todaysFromBackend];
       renderLog();
     } catch(err){ console.error('Could not load today\'s orders from backend:', err); }
   }
@@ -1014,11 +1047,7 @@
     }
     document.getElementById('recallFrom').value = from.toISOString().slice(0,10);
     document.getElementById('recallTo').value = today.toISOString().slice(0,10);
-    searchOrdersGated();
-  }
-
-  function searchOrdersGated(){
-    requireAdmin(searchOrders);
+    searchOrders();
   }
 
   let recallResultsCache = [];
@@ -1040,6 +1069,13 @@
         return;
       }
       let results = data.data.map(parseFetchedOrder).filter(o => o.date >= from && o.date <= to);
+
+      // Carry over local signature images where we already have them (backend doesn't store them)
+      results.forEach(r => {
+        const existing = orders.find(o => normalizeOrderNoFrontend(o.orderNo) === normalizeOrderNoFrontend(r.orderNo));
+        if(existing && existing.signature) r.signature = existing.signature;
+      });
+
       if(query){
         results = results.filter(o =>
           (o.company||'').toLowerCase().includes(query) ||
@@ -1054,32 +1090,73 @@
         return;
       }
       recallResultsCache = results;
-      el.innerHTML = results.map((o,i) => `
-        <div class="logrow" onclick="recallOrder(${i})">
-          <div>
-            <div class="lname">${o.company || '—'} <span class="mono">#${o.orderNo}</span></div>
-            <div class="lmeta">${o.date} · ${o.driver || '—'} · ${o.payment || '—'}</div>
-          </div>
-          <div class="lamt">R ${o.total.toFixed(2)}</div>
-        </div>
-      `).join('');
+      renderRecallResults();
     } catch(err){
       console.error('Order search failed:', err);
       el.innerHTML = '<div class="empty-log">Search failed — check your connection.</div>';
     }
   }
 
-  function recallOrder(i){
-    const o = recallResultsCache[i];
-    if(!o) return;
-    let idx = orders.findIndex(x => normalizeOrderNoFrontend(x.orderNo) === normalizeOrderNoFrontend(o.orderNo));
-    if(idx === -1){
-      orders.unshift(o);
-      idx = 0;
+  function renderRecallResults(){
+    const el = document.getElementById('recallResults');
+    if(recallResultsCache.length === 0){
+      el.innerHTML = '<div class="empty-log">No orders found in that range.</div>';
+      return;
+    }
+    el.innerHTML = recallResultsCache.map((o,i) => `
+      <div class="logrow" onclick="recallOrder(${i})">
+        <div>
+          <div class="lname">${o.company || '—'} <span class="mono">#${o.orderNo}</span> <span class="sync-badge sync-ok" title="Saved to Google Sheet">☁</span></div>
+          <div class="lmeta">${o.date}${o.slipNo ? ` · Slip #${o.slipNo}` : ''} · ${o.driver || '—'} · ${o.payment || '—'}${o.signature ? ' · Signed ✓' : ''}</div>
+        </div>
+        <div class="logrow-actions">
+          <div class="lamt">R ${o.total.toFixed(2)}</div>
+          <div class="logrow-icon-btn logrow-icon-btn--print" title="Print receipt" onclick="event.stopPropagation(); printOrderObj(recallResultsCache[${i}])">🖶</div>
+          <div class="logrow-icon-btn logrow-icon-btn--delete" title="Delete order" onclick="event.stopPropagation(); deleteRecallOrderGated(${i})">✕</div>
+        </div>
+      </div>
+    `).join('');
+  }
+
+  function deleteRecallOrderGated(i){
+    requireAdmin(()=>deleteRecallOrder(i));
+  }
+
+  function deleteRecallOrder(i){
+    const order = recallResultsCache[i];
+    if(!order) return;
+    if(!confirm(`Delete order #${order.orderNo} (${order.company}, R${order.total.toFixed(2)})? This cannot be undone.`)) return;
+
+    recallResultsCache.splice(i, 1);
+    renderRecallResults();
+
+    const idx = orders.findIndex(x => normalizeOrderNoFrontend(x.orderNo) === normalizeOrderNoFrontend(order.orderNo));
+    if(idx > -1){
+      if(editingIndex === idx) cancelEdit();
+      orders.splice(idx, 1);
       renderLog();
     }
-    loadOrderForEdit(idx);
-    window.scrollTo({top:0, behavior:'smooth'});
+
+    fetch(BACKEND_URL, {
+      method: 'POST',
+      headers: {'Content-Type': 'text/plain;charset=utf-8'},
+      body: JSON.stringify({action: 'deleteOrder', orderNo: order.orderNo})
+    }).catch(err => console.error('Could not delete order from backend:', err));
+  }
+
+  function recallOrder(i){
+    requireAdmin(()=>{
+      const o = recallResultsCache[i];
+      if(!o) return;
+      let idx = orders.findIndex(x => normalizeOrderNoFrontend(x.orderNo) === normalizeOrderNoFrontend(o.orderNo));
+      if(idx === -1){
+        orders.unshift(o);
+        idx = 0;
+        renderLog();
+      }
+      loadOrderForEdit(idx);
+      window.scrollTo({top:0, behavior:'smooth'});
+    });
   }
 
   async function loadFromBackend(){
@@ -1568,7 +1645,10 @@
   }
 
   function printOrder(i){
-    const o = orders[i];
+    printOrderObj(orders[i]);
+  }
+
+  function printOrderObj(o){
     if(!o) return;
 
     const washRows = Object.entries(o.wash).map(([k,v])=>`<tr><td>${k}</td><td>${v.qty}</td><td>R${v.price.toFixed(2)}</td><td>R${(v.qty*v.price).toFixed(2)}</td></tr>`).join('');
@@ -1619,16 +1699,7 @@
         </div>
       </div>
     `).join('');
-  }
-
-  function clearLog(){
-    requireAdmin(()=>{
-      if(confirm('Clear all orders from this session log? This cannot be undone.')){
-        orders = [];
-        if(editingIndex !== null) cancelEdit();
-        renderLog();
-      }
-    });
+    saveOrdersCache();
   }
 
   function buildExportData(){
@@ -1776,6 +1847,9 @@
   renderPay();
   renderShift();
   setupSignaturePad();
+  loadOrdersCache();
+  renderLog();
+  retryAllUnsynced();
   loadFromBackend();
   loadTodaysOrders();
 </script>
