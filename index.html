@@ -963,7 +963,20 @@
     }
   }
 
-  function dateKey(v){ return String(v).slice(0,10); } // handles both "2026-08-14" and ISO-with-time strings
+  function dateKey(v){
+    const s = String(v);
+    if(s.includes('T')){
+      // Sheets sometimes stores this as a real date value, which comes back as a UTC
+      // timestamp — slicing that directly can land on the wrong calendar day for SAST.
+      // Use the browser's local date instead, which reflects the tablet's actual timezone.
+      const d = new Date(s);
+      const yyyy = d.getFullYear();
+      const mm = String(d.getMonth()+1).padStart(2,'0');
+      const dd = String(d.getDate()).padStart(2,'0');
+      return `${yyyy}-${mm}-${dd}`;
+    }
+    return s.slice(0,10); // already a plain "2026-08-17" style string
+  }
 
   function parseServiceStringToObj(str){
     const obj = {};
