@@ -963,6 +963,20 @@
     }
   }
 
+  function todayLocalStr(){
+    // Builds a "YYYY-MM-DD" string from local date parts — never use toISOString()
+    // for this, since it converts to UTC first and can shift the calendar day
+    // for timezones ahead of UTC (like SAST) depending on time of day.
+    return toLocalDateStr(new Date());
+  }
+
+  function toLocalDateStr(d){
+    const yyyy = d.getFullYear();
+    const mm = String(d.getMonth()+1).padStart(2,'0');
+    const dd = String(d.getDate()).padStart(2,'0');
+    return `${yyyy}-${mm}-${dd}`;
+  }
+
   function dateKey(v){
     const s = String(v);
     if(s.includes('T')){
@@ -1030,7 +1044,7 @@
       const res = await fetch(`${BACKEND_URL}?action=getOrders`);
       const data = await res.json();
       if(!data.success || !Array.isArray(data.data)) return;
-      const today = document.getElementById('dateIn').value || new Date().toISOString().slice(0,10);
+      const today = document.getElementById('dateIn').value || todayLocalStr();
       const todaysFromBackend = data.data.filter(o => dateKey(o['Date']) === today).reverse().map(parseFetchedOrder);
 
       // Backend doesn't store signature images — carry over any we already have locally
@@ -1061,8 +1075,8 @@
     } else if(preset === 'month'){
       from.setDate(1);
     }
-    document.getElementById('recallFrom').value = from.toISOString().slice(0,10);
-    document.getElementById('recallTo').value = today.toISOString().slice(0,10);
+    document.getElementById('recallFrom').value = toLocalDateStr(from);
+    document.getElementById('recallTo').value = toLocalDateStr(today);
     searchOrders();
   }
 
@@ -1201,7 +1215,7 @@
     } catch(err){ console.error('Could not load next order number from backend:', err); }
 
     try {
-      const today = document.getElementById('dateIn').value || new Date().toISOString().slice(0,10);
+      const today = document.getElementById('dateIn').value || todayLocalStr();
       const res = await fetch(`${BACKEND_URL}?action=getShift&date=${today}`);
       const data = await res.json();
       if(data.success && data.data){
@@ -1383,7 +1397,7 @@
   function selectWorker(w){
     currentWorker = w;
     renderShift();
-    const today = document.getElementById('dateIn').value || new Date().toISOString().slice(0,10);
+    const today = document.getElementById('dateIn').value || todayLocalStr();
     fetch(BACKEND_URL, {
       method: 'POST',
       headers: {'Content-Type': 'text/plain;charset=utf-8'},
@@ -1745,7 +1759,7 @@
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = `lapaside_orders_${new Date().toISOString().slice(0,10)}.csv`;
+    a.download = `lapaside_orders_${todayLocalStr()}.csv`;
     a.click();
     URL.revokeObjectURL(url);
   }
@@ -1762,7 +1776,7 @@
     ws['!cols'] = headers.map(h => ({wch: Math.max(10, h.length + 2)}));
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, 'Orders');
-    XLSX.writeFile(wb, `lapaside_orders_${new Date().toISOString().slice(0,10)}.xlsx`);
+    XLSX.writeFile(wb, `lapaside_orders_${todayLocalStr()}.xlsx`);
   }
 
   // ---- Signature pad ----
