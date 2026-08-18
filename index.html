@@ -683,19 +683,23 @@
 
   #printArea{display:none;}
   @media print{
+    html, body{background:#FFFFFF !important;}
     body > *:not(#printArea){display:none !important;}
     #printArea{
       display:block !important;
+      background:#FFFFFF !important;
       font-family:'Barlow', sans-serif;
+      font-weight:600;
       color:#000;
       padding:20px;
     }
-    #printArea h1{font-family:'Barlow Condensed', sans-serif; font-size:22px; margin:0 0 4px;}
-    #printArea .receipt-meta{font-size:12px; color:#333; margin-bottom:16px;}
+    #printArea h1{font-family:'Barlow Condensed', sans-serif; font-size:22px; font-weight:800; margin:0 0 4px;}
+    #printArea .receipt-meta{font-size:12px; font-weight:600; color:#000; margin-bottom:16px;}
     #printArea table{width:100%; border-collapse:collapse; margin:12px 0;}
-    #printArea td, #printArea th{border:1px solid #999; padding:6px 8px; font-size:13px; text-align:left;}
+    #printArea td, #printArea th{border:1.5px solid #000; padding:6px 8px; font-size:13px; font-weight:600; text-align:left;}
+    #printArea th{font-weight:700;}
     #printArea .receipt-total{font-size:16px; font-weight:700; text-align:right; margin-top:8px;}
-    #printArea .receipt-sig img{max-width:220px; border:1px solid #999; margin-top:8px;}
+    #printArea .receipt-sig img{max-width:220px; border:1.5px solid #000; margin-top:8px;}
   }
 </style>
 </head>
@@ -1110,7 +1114,7 @@
         </div>
         <div class="logrow-actions">
           <div class="lamt">R ${o.total.toFixed(2)}</div>
-          <div class="logrow-icon-btn logrow-icon-btn--print" title="Print receipt" onclick="event.stopPropagation(); printOrderObj(recallResultsCache[${i}])">🖶</div>
+          <div class="logrow-icon-btn logrow-icon-btn--print" title="Print receipt" onclick="event.stopPropagation(); printOrderObj(recallResultsCache[${i}])"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 6 2 18 2 18 9"></polyline><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"></path><rect x="6" y="14" width="12" height="8"></rect></svg></div>
           <div class="logrow-icon-btn logrow-icon-btn--delete" title="Delete order" onclick="event.stopPropagation(); deleteRecallOrderGated(${i})">✕</div>
         </div>
       </div>
@@ -1693,7 +1697,7 @@
         </div>
         <div class="logrow-actions">
           <div class="lamt">R ${o.total.toFixed(2)}</div>
-          <div class="logrow-icon-btn logrow-icon-btn--print" title="Print receipt" onclick="event.stopPropagation(); printOrder(${i})">🖶</div>
+          <div class="logrow-icon-btn logrow-icon-btn--print" title="Print receipt" onclick="event.stopPropagation(); printOrder(${i})"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 6 2 18 2 18 9"></polyline><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"></path><rect x="6" y="14" width="12" height="8"></rect></svg></div>
           <div class="logrow-icon-btn logrow-icon-btn--delete" title="Delete order" onclick="event.stopPropagation(); deleteOrderGated(${i})">✕</div>
         </div>
       </div>
