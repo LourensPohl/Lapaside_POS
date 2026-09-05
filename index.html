@@ -683,23 +683,46 @@
 
   #printArea{display:none;}
   @media print{
+    @page{ size: 80mm auto; margin: 2mm; }
     html, body{background:#FFFFFF !important;}
     body > *:not(#printArea){display:none !important;}
     #printArea{
       display:block !important;
       background:#FFFFFF !important;
+      width:76mm;
       font-family:'Barlow', sans-serif;
-      font-weight:600;
+      font-weight:700;
+      font-size:13px;
+      line-height:1.35;
       color:#000;
-      padding:20px;
+      padding:0;
     }
-    #printArea h1{font-family:'Barlow Condensed', sans-serif; font-size:22px; font-weight:800; margin:0 0 4px;}
-    #printArea .receipt-meta{font-size:12px; font-weight:600; color:#000; margin-bottom:16px;}
-    #printArea table{width:100%; border-collapse:collapse; margin:12px 0;}
-    #printArea td, #printArea th{border:1.5px solid #000; padding:6px 8px; font-size:13px; font-weight:600; text-align:left;}
-    #printArea th{font-weight:700;}
-    #printArea .receipt-total{font-size:16px; font-weight:700; text-align:right; margin-top:8px;}
-    #printArea .receipt-sig img{max-width:220px; border:1.5px solid #000; margin-top:8px;}
+    #printArea h1{
+      font-family:'Barlow Condensed', sans-serif;
+      font-size:17px;
+      font-weight:800;
+      text-align:center;
+      margin:0 0 4px;
+      line-height:1.15;
+    }
+    #printArea .receipt-meta{
+      font-size:10.5px;
+      font-weight:700;
+      color:#000;
+      text-align:center;
+      margin-bottom:4px;
+      line-height:1.4;
+    }
+    #printArea .r-divider{border-top:1.5px dashed #000; margin:6px 0;}
+    #printArea .r-line{display:flex; justify-content:space-between; gap:6px; margin-bottom:2px;}
+    #printArea .r-label{font-weight:700; flex-shrink:0;}
+    #printArea .r-value{text-align:right; word-break:break-word;}
+    #printArea .r-line-full{font-size:12px; margin-bottom:2px;}
+    #printArea table{width:100%; border-collapse:collapse; margin:0;}
+    #printArea td{padding:2px 0; font-size:13px; font-weight:700;}
+    #printArea td:last-child{text-align:right; white-space:nowrap;}
+    #printArea .receipt-total{font-size:18px; font-weight:800; text-align:center; margin-top:2px;}
+    #printArea .receipt-sig img{max-width:100%; margin-top:4px;}
   }
 </style>
 </head>
@@ -992,6 +1015,27 @@
     return s.slice(0,10); // already a plain "2026-08-17" style string
   }
 
+  function timeKey(v){
+    if(!v) return '';
+    const s = String(v);
+    if(s.includes('T')){
+      // Same issue as dates — Sheets can silently convert a time-only value like "09:20"
+      // into a real time value, which comes back as a full UTC timestamp with a bogus
+      // placeholder date (usually 1899-12-30, Sheets' internal "time zero" reference).
+      // Using the browser's automatic local-time conversion on that placeholder date is
+      // unsafe — South Africa's timezone offset was different before 1903, so the browser
+      // would apply the wrong historical offset. Use UTC getters + a fixed +2h SAST
+      // offset instead, since that's correct for any real, present-day order.
+      const d = new Date(s);
+      let totalMinutes = d.getUTCHours()*60 + d.getUTCMinutes() + 120;
+      totalMinutes = ((totalMinutes % 1440) + 1440) % 1440;
+      const hh = String(Math.floor(totalMinutes/60)).padStart(2,'0');
+      const mm = String(totalMinutes%60).padStart(2,'0');
+      return `${hh}:${mm}`;
+    }
+    return s; // already a plain "09:20" style string
+  }
+
   function parseServiceStringToObj(str){
     const obj = {};
     if(!str) return obj;
@@ -1024,8 +1068,8 @@
       reg: o['Reg No'] || '',
       fleet: o['Fleet No'] || '',
       extraVehicles: parseExtraVehiclesDisplay(o['Additional Vehicles']),
-      arrive: o['Arrived'] || '',
-      depart: o['Departed'] || '',
+      arrive: timeKey(o['Arrived']),
+      depart: timeKey(o['Departed']),
       wash: parseServiceStringToObj(o['Wash Services']),
       stop: parseServiceStringToObj(o['Stop Services']),
       washOtherNote: o['Wash Other Note'] || '',
@@ -1681,34 +1725,42 @@
   function printOrderObj(o){
     if(!o) return;
 
-    const washRows = Object.entries(o.wash).map(([k,v])=>`<tr><td>${k}</td><td>${v.qty}</td><td>R${v.price.toFixed(2)}</td><td>R${(v.qty*v.price).toFixed(2)}</td></tr>`).join('');
-    const stopRows = Object.entries(o.stop).map(([k,v])=>`<tr><td>${k}</td><td>${v.qty}</td><td>R${v.price.toFixed(2)}</td><td>R${(v.qty*v.price).toFixed(2)}</td></tr>`).join('');
+    const infoLine = (label, value) => value ? `<div class="r-line"><span class="r-label">${label}</span><span class="r-value">${value}</span></div>` : '';
+
+    const washRows = Object.entries(o.wash).map(([k,v])=>`<tr><td>${k} x${v.qty}</td><td>R${(v.qty*v.price).toFixed(2)}</td></tr>`).join('');
+    const stopRows = Object.entries(o.stop).map(([k,v])=>`<tr><td>${k} x${v.qty}</td><td>R${(v.qty*v.price).toFixed(2)}</td></tr>`).join('');
     const extraVehicleRows = (o.extraVehicles||[]).map(v=>
-      `<div>${v.driver?v.driver+' — ':''}${v.type||'Vehicle'}: ${v.reg||'—'}${v.fleet?` (Fleet ${v.fleet})`:''}</div>`
+      `<div class="r-line-full">${v.driver?v.driver+' — ':''}${v.type||'Vehicle'}: ${v.reg||'—'}${v.fleet?` (Fleet ${v.fleet})`:''}</div>`
     ).join('');
 
     document.getElementById('printArea').innerHTML = `
       <h1>Lapaside Truck Wash &amp; Truck Stop</h1>
       <div class="receipt-meta">
         280 Nooitgedacht, C/o Botha Street &amp; R25, Bronkhorstspruit<br>
-        Tel: 065 928 3121 / 069 724 6116 &nbsp;·&nbsp; lapasidetrucks@gmail.com<br>
+        Tel: 065 928 3121 / 069 724 6116<br>
+        lapasidetrucks@gmail.com<br>
         Co Reg. No. 2006/177999/23
       </div>
+      <div class="r-divider"></div>
+      ${infoLine('Order No.', '#'+o.orderNo)}
+      ${infoLine('Slip No.', o.slipNo || '—')}
+      ${infoLine('Date', o.date)}
+      ${infoLine('Company', o.company)}
+      ${infoLine('Driver', o.driver || '—')}
+      ${infoLine('Vehicle', o.vehicle || '—')}
+      ${infoLine('Reg No.', o.reg || '—')}
+      ${infoLine('Fleet No.', o.fleet || '—')}
+      ${infoLine('Arrived', o.arrive || '—')}
+      ${infoLine('Departed', o.depart || '—')}
+      ${infoLine('Payment', o.payment)}
+      ${extraVehicleRows ? `<div class="r-divider"></div><div class="r-label">Additional Vehicles:</div>${extraVehicleRows}` : ''}
+      <div class="r-divider"></div>
       <table>
-        <tr><td><strong>Order No.</strong></td><td>#${o.orderNo}</td><td><strong>Slip No.</strong></td><td>${o.slipNo || '—'}</td></tr>
-        <tr><td><strong>Date</strong></td><td>${o.date}</td><td><strong>Payment</strong></td><td>${o.payment}</td></tr>
-        <tr><td><strong>Company</strong></td><td colspan="3">${o.company}</td></tr>
-        <tr><td><strong>Driver</strong></td><td>${o.driver || '—'}</td><td><strong>Vehicle</strong></td><td>${o.vehicle || '—'}</td></tr>
-        <tr><td><strong>Reg No.</strong></td><td>${o.reg || '—'}</td><td><strong>Fleet No.</strong></td><td>${o.fleet || '—'}</td></tr>
-        <tr><td><strong>Arrived</strong></td><td>${o.arrive || '—'}</td><td><strong>Departed</strong></td><td>${o.depart || '—'}</td></tr>
-      </table>
-      ${extraVehicleRows ? `<div><strong>Additional Vehicles:</strong>${extraVehicleRows}</div>` : ''}
-      <table>
-        <tr><th>Service</th><th>Qty</th><th>Price</th><th>Line Total</th></tr>
         ${washRows}${stopRows}
       </table>
-      <div class="receipt-total">Total: R ${o.total.toFixed(2)}</div>
-      ${o.signature ? `<div class="receipt-sig"><strong>Driver Signature:</strong><br><img src="${o.signature}"></div>` : ''}
+      <div class="r-divider"></div>
+      <div class="receipt-total">TOTAL: R ${o.total.toFixed(2)}</div>
+      ${o.signature ? `<div class="r-divider"></div><div class="receipt-sig"><div class="r-label">Driver Signature:</div><img src="${o.signature}"></div>` : ''}
     `;
     window.print();
   }
