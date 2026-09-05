@@ -723,6 +723,7 @@
     #printArea td:last-child{text-align:right; white-space:nowrap;}
     #printArea .receipt-total{font-size:18px; font-weight:800; text-align:center; margin-top:2px;}
     #printArea .receipt-sig img{max-width:100%; margin-top:4px;}
+    #printArea .receipt-footer-space{height:24mm;}
   }
 </style>
 </head>
@@ -1734,11 +1735,9 @@
     ).join('');
 
     document.getElementById('printArea').innerHTML = `
-      <h1>Lapaside Truck Wash &amp; Truck Stop</h1>
       <div class="receipt-meta">
         280 Nooitgedacht, C/o Botha Street &amp; R25, Bronkhorstspruit<br>
-        Tel: 065 928 3121 / 069 724 6116<br>
-        lapasidetrucks@gmail.com<br>
+        Tel: 065 928 3121 &middot; lapasidetrucks@gmail.com<br>
         Co Reg. No. 2006/177999/23
       </div>
       <div class="r-divider"></div>
@@ -1761,6 +1760,7 @@
       <div class="r-divider"></div>
       <div class="receipt-total">TOTAL: R ${o.total.toFixed(2)}</div>
       ${o.signature ? `<div class="r-divider"></div><div class="receipt-sig"><div class="r-label">Driver Signature:</div><img src="${o.signature}"></div>` : ''}
+      <div class="receipt-footer-space"></div>
     `;
     window.print();
   }
