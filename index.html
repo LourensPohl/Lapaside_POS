@@ -120,6 +120,25 @@
   .card--log h2 .dot{background:var(--teal);}
   .card--shift{border-left-color:var(--copper);}
   .card--shift h2 .dot{background:var(--copper);}
+  .card--shift2{border-left-color:var(--go);}
+  .card--shift2 h2 .dot{background:var(--go);}
+  .shift-row{display:flex; gap:var(--space-4); align-items:stretch; margin-bottom:var(--space-4);}
+  .shift-row .card{flex:1; min-width:0; margin-bottom:0;}
+  @media (max-width:480px){
+    .shift-row{flex-direction:column;}
+  }
+  .shift-other-wrap{display:none; margin-top:var(--space-3);}
+  .shift-other-wrap.active{display:block;}
+  .shift-other-wrap input{
+    width:100%;
+    padding:var(--space-3);
+    font-size:16px;
+    border:1.5px solid var(--concrete-line);
+    border-radius:var(--radius-md);
+    background:var(--concrete);
+    color:var(--asphalt);
+  }
+  .shift-other-wrap input:focus{outline:none; border-color:var(--steel); background:var(--paper);}
   .card--recall{border-left-color:var(--indigo);}
   .card--recall h2 .dot{background:var(--indigo);}
   .recall-presets{display:flex; gap:var(--space-2); margin-bottom:var(--space-3);}
@@ -128,7 +147,7 @@
   .recall-results .logrow{border-bottom:1px solid var(--concrete-line);}
   .shift-chips{display:flex; flex-wrap:wrap; gap:var(--space-2);}
   .shift-chip{
-    flex:1 1 auto;
+    flex:0 1 auto;
     min-width:80px;
     text-align:center;
     border:1.5px solid var(--concrete-line);
@@ -750,11 +769,24 @@
     <button type="button" class="edit-banner-cancel" onclick="cancelEdit()">Cancel</button>
   </div>
 
-  <div class="card card--shift">
-    <h2><span class="dot"></span>Who's Working Today?</h2>
-    <div class="shift-chips" id="shiftChips"></div>
-    <div class="shift-hint">Sets who earns commission on every order saved today. Change this once at the start of the shift.</div>
+  <div class="shift-row">
+    <div class="card card--shift">
+      <h2><span class="dot"></span>Security</h2>
+      <div class="shift-chips" id="securityChips"></div>
+      <div class="shift-other-wrap" id="securityOtherWrap">
+        <input type="text" id="securityOtherInput" list="staffOtherList" placeholder="Enter name" oninput="updateSecurityOtherName(this.value)">
+      </div>
+    </div>
+
+    <div class="card card--shift2">
+      <h2><span class="dot"></span>Washing Staff</h2>
+      <div class="shift-chips" id="washingChips"></div>
+      <div class="shift-other-wrap" id="washingOtherWrap">
+        <input type="text" id="washingOtherInput" list="staffOtherList" placeholder="Enter name" oninput="updateWashingStaffOtherName(this.value)">
+      </div>
+    </div>
   </div>
+  <datalist id="staffOtherList"></datalist>
 
   <div class="card card--customer">
     <h2 class="h2-with-action">
@@ -1060,7 +1092,8 @@
       orderNo: String(o['Order No']),
       slipNo: o['Slip No'] ? String(o['Slip No']) : '',
       date: dateKey(o['Date']),
-      worker: o['Worker'] || 'Both',
+      washingStaff: o['Washing Staff'] ? String(o['Washing Staff']).split(',').map(s=>s.trim()).filter(Boolean) : ['David','July'],
+      security: o['Security'] || 'Siabonga',
       company: o['Company'] || '',
       companyPhone: o['Company Phone No'] || '',
       driver: o['Driver'] || '',
@@ -1243,6 +1276,7 @@
         if(d.companies && d.companies.length) companies = [...new Set([...companies, ...d.companies])];
         if(d.drivers && d.drivers.length) drivers = [...new Set([...drivers, ...d.drivers])];
         if(d.vehicleTypes && d.vehicleTypes.length) vehicleTypes = [...new Set([...vehicleTypes, ...d.vehicleTypes])];
+        if(d.staffOther && d.staffOther.length) staffOtherNames = [...new Set([...staffOtherNames, ...d.staffOther])];
         refreshLists();
       }
     } catch(err){ console.error('Could not load lookups from backend:', err); }
@@ -1263,10 +1297,7 @@
       const today = document.getElementById('dateIn').value || todayLocalStr();
       const res = await fetch(`${BACKEND_URL}?action=getShift&date=${today}`);
       const data = await res.json();
-      if(data.success && data.data){
-        currentWorker = data.data;
-        renderShift();
-      }
+      if(data.success) applyShiftData(data.data);
     } catch(err){ console.error('Could not load shift setting from backend:', err); }
   }
 
@@ -1280,13 +1311,18 @@
   let orders = [];
   let editingIndex = null;
   let lastSlipNo = null;
-  const shiftWorkers = ["Both","David","July","Other"];
-  let currentWorker = 'Both';
+  const KNOWN_STAFF = ["David","July","Siabonga"];
+  let currentWashingStaff = ["David","July"];
+  let currentSecurity = "Siabonga";
+  let washingStaffOtherActive = false;
+  let washingStaffOtherName = "";
+  let staffOtherNames = [];
 
   function refreshLists(){
     document.getElementById('companyList').innerHTML = companies.map(c=>`<option value="${c}">`).join('');
     document.getElementById('driverList').innerHTML = drivers.map(d=>`<option value="${d}">`).join('');
     document.getElementById('vehicleList').innerHTML = vehicleTypes.map(v=>`<option value="${v}">`).join('');
+    document.getElementById('staffOtherList').innerHTML = staffOtherNames.map(n=>`<option value="${n}">`).join('');
   }
 
   function renderExtraVehicles(){
@@ -1435,19 +1471,92 @@
   }
   function selectPay(p){ selectedPay = p; renderPay(); }
 
-  function renderShift(){
-    const el = document.getElementById('shiftChips');
-    el.innerHTML = shiftWorkers.map(w=>`<div class="shift-chip ${currentWorker===w?'active':''}" onclick="selectWorker('${w}')">${w}</div>`).join('');
+  function renderSecurity(){
+    const el = document.getElementById('securityChips');
+    const isOther = currentSecurity !== 'Siabonga';
+    el.innerHTML = `
+      <div class="shift-chip ${!isOther?'active':''}" onclick="selectSecurity('Siabonga')">Siabonga</div>
+      <div class="shift-chip ${isOther?'active':''}" onclick="selectSecurity('Other')">Other</div>
+    `;
+    const wrap = document.getElementById('securityOtherWrap');
+    wrap.classList.toggle('active', isOther);
+    if(isOther) document.getElementById('securityOtherInput').value = currentSecurity;
   }
-  function selectWorker(w){
-    currentWorker = w;
-    renderShift();
+
+  function selectSecurity(choice){
+    if(choice === 'Siabonga'){
+      currentSecurity = 'Siabonga';
+    } else if(currentSecurity === 'Siabonga'){
+      currentSecurity = ''; // switching to Other with nothing typed yet
+    }
+    renderSecurity();
+    saveShiftToBackend();
+    if(choice !== 'Siabonga') setTimeout(()=>document.getElementById('securityOtherInput')?.focus(), 50);
+  }
+
+  function updateSecurityOtherName(val){
+    currentSecurity = val.trim();
+    saveShiftToBackend();
+  }
+
+  function renderWashingStaff(){
+    const el = document.getElementById('washingChips');
+    el.innerHTML = ['David','July','Siabonga'].map(name =>
+      `<div class="shift-chip ${currentWashingStaff.includes(name)?'active':''}" onclick="toggleWashingStaff('${name}')">${name}</div>`
+    ).join('') + `<div class="shift-chip ${washingStaffOtherActive?'active':''}" onclick="toggleWashingStaffOther()">Other</div>`;
+    const wrap = document.getElementById('washingOtherWrap');
+    wrap.classList.toggle('active', washingStaffOtherActive);
+    if(washingStaffOtherActive) document.getElementById('washingOtherInput').value = washingStaffOtherName;
+  }
+
+  function toggleWashingStaff(name){
+    const idx = currentWashingStaff.indexOf(name);
+    if(idx > -1) currentWashingStaff.splice(idx, 1);
+    else currentWashingStaff.push(name);
+    renderWashingStaff();
+    saveShiftToBackend();
+  }
+
+  function toggleWashingStaffOther(){
+    washingStaffOtherActive = !washingStaffOtherActive;
+    if(!washingStaffOtherActive && washingStaffOtherName){
+      const idx = currentWashingStaff.indexOf(washingStaffOtherName);
+      if(idx > -1) currentWashingStaff.splice(idx, 1);
+      washingStaffOtherName = '';
+    }
+    renderWashingStaff();
+    saveShiftToBackend();
+    if(washingStaffOtherActive) setTimeout(()=>document.getElementById('washingOtherInput')?.focus(), 50);
+  }
+
+  function updateWashingStaffOtherName(val){
+    if(washingStaffOtherName){
+      const idx = currentWashingStaff.indexOf(washingStaffOtherName);
+      if(idx > -1) currentWashingStaff.splice(idx, 1);
+    }
+    washingStaffOtherName = val.trim();
+    if(washingStaffOtherName) currentWashingStaff.push(washingStaffOtherName);
+    saveShiftToBackend();
+  }
+
+  function saveShiftToBackend(){
     const today = document.getElementById('dateIn').value || todayLocalStr();
     fetch(BACKEND_URL, {
       method: 'POST',
       headers: {'Content-Type': 'text/plain;charset=utf-8'},
-      body: JSON.stringify({action: 'setShift', date: today, worker: w})
+      body: JSON.stringify({action: 'setShift', date: today, washingStaff: currentWashingStaff, security: currentSecurity})
     }).catch(err => console.error('Could not save shift setting:', err));
+  }
+
+  function applyShiftData(shift){
+    if(!shift) return;
+    currentWashingStaff = Array.isArray(shift.washingStaff) ? shift.washingStaff.slice() : ['David','July'];
+    currentSecurity = shift.security || 'Siabonga';
+    const otherInWashing = currentWashingStaff.find(n => !KNOWN_STAFF.includes(n));
+    washingStaffOtherActive = !!otherInWashing;
+    washingStaffOtherName = otherInWashing || '';
+    renderSecurity();
+    renderWashingStaff();
   }
 
   async function refreshShiftForDate(){
@@ -1456,10 +1565,7 @@
     try {
       const res = await fetch(`${BACKEND_URL}?action=getShift&date=${date}`);
       const data = await res.json();
-      if(data.success && data.data){
-        currentWorker = data.data;
-        renderShift();
-      }
+      if(data.success) applyShiftData(data.data);
     } catch(err){ console.error('Could not load shift setting for date:', err); }
   }
 
@@ -1513,7 +1619,8 @@
       orderNo: isEditing ? orders[editingIndex].orderNo : pad(orderCounter),
       date: document.getElementById('dateIn').value,
       slipNo,
-      worker: currentWorker,
+      washingStaff: [...currentWashingStaff],
+      security: currentSecurity,
       company, driver,
       customOrderNo: document.getElementById('customOrderNoIn').value.trim(),
       companyPhone: document.getElementById('companyPhoneIn').value.trim(),
@@ -1772,7 +1879,7 @@
       <div class="logrow" onclick="loadOrderForEditGated(${i})">
         <div>
           <div class="lname">${o.company} <span class="mono">#${o.orderNo}</span> ${syncBadge(o, i)}</div>
-          <div class="lmeta">${o.slipNo ? `Slip #${o.slipNo} · ` : ''}${o.worker ? `${o.worker} · ` : ''}${o.driver || '—'} · ${o.payment}${o.extraVehicles.length ? ` · ${o.extraVehicles.length+1} vehicles` : ''}${o.signature ? ' · Signed ✓' : ''}</div>
+          <div class="lmeta">${o.slipNo ? `Slip #${o.slipNo} · ` : ''}${o.washingStaff && o.washingStaff.length ? `${o.washingStaff.join('+')} · ` : ''}${o.driver || '—'} · ${o.payment}${o.extraVehicles.length ? ` · ${o.extraVehicles.length+1} vehicles` : ''}${o.signature ? ' · Signed ✓' : ''}</div>
         </div>
         <div class="logrow-actions">
           <div class="lamt">R ${o.total.toFixed(2)}</div>
@@ -1785,9 +1892,9 @@
   }
 
   function buildExportData(){
-    const headers = ["Order No","Slip No","Date","Worker","Company","Company Phone No","Driver","Custom Order No","Vehicle","Reg No","Fleet No","Additional Vehicles","Arrived","Departed","Wash Services","Wash Other Note","Stop Services","Stop Other Note","Payment","Signed","Total"];
+    const headers = ["Order No","Slip No","Date","Washing Staff","Security","Company","Company Phone No","Driver","Custom Order No","Vehicle","Reg No","Fleet No","Additional Vehicles","Arrived","Departed","Wash Services","Wash Other Note","Stop Services","Stop Other Note","Payment","Signed","Total"];
     const rows = orders.map(o=>[
-      o.orderNo, o.slipNo, o.date, o.worker || 'Both', o.company, o.companyPhone, o.driver, o.customOrderNo, o.vehicle, o.reg, o.fleet,
+      o.orderNo, o.slipNo, o.date, (o.washingStaff||[]).join(', ') || 'David, July', o.security || 'Siabonga', o.company, o.companyPhone, o.driver, o.customOrderNo, o.vehicle, o.reg, o.fleet,
       o.extraVehicles.map(v=>`${v.driver?v.driver+' — ':''}${v.type||'Vehicle'}: ${v.reg||'—'}${v.fleet?` (Fleet ${v.fleet})`:''}`).join('; '),
       o.arrive, o.depart,
       Object.entries(o.wash).map(([k,v])=>`${k} x${v.qty}(R${v.price})`).join('; '),
@@ -1927,7 +2034,8 @@
   renderChips('washChips', washServices, selectedWash);
   renderChips('stopChips', stopServices, selectedStop);
   renderPay();
-  renderShift();
+  renderSecurity();
+  renderWashingStaff();
   setupSignaturePad();
   loadOrdersCache();
   renderLog();
