@@ -287,6 +287,30 @@
     transition:border-color 0.12s;
   }
   .extra-vehicle-row input:focus{outline:none; border-color:var(--steel);}
+
+  .autocomplete-wrap{position:relative; width:100%;}
+  .autocomplete-list{
+    display:none;
+    position:absolute;
+    top:100%; left:0; right:0;
+    z-index:60;
+    max-height:180px;
+    overflow-y:auto;
+    background:var(--paper);
+    border:1.5px solid var(--concrete-line);
+    border-top:none;
+    border-radius:0 0 var(--radius-md) var(--radius-md);
+    box-shadow:0 6px 14px rgba(0,0,0,0.12);
+  }
+  .autocomplete-list.active{display:block;}
+  .autocomplete-item{
+    padding:var(--space-2) var(--space-3);
+    font-size:15px;
+    cursor:pointer;
+    border-bottom:1px solid var(--concrete-line);
+  }
+  .autocomplete-item:last-child{border-bottom:none;}
+  .autocomplete-item:active{background:var(--concrete);}
   .remove-vehicle-btn{
     width:30px; height:30px;
     border-radius:var(--radius-sm);
@@ -803,8 +827,10 @@
       </div>
       <div class="field">
         <label for="companyIn">Company Name</label>
-        <input type="text" id="companyIn" list="companyList">
-        <datalist id="companyList"></datalist>
+        <div class="autocomplete-wrap">
+          <input type="text" id="companyIn" autocomplete="off" oninput="showSuggestions('companyIn', companies)" onfocus="showSuggestions('companyIn', companies)" onblur="hideSuggestions('companyIn')">
+          <div class="autocomplete-list" id="companyIn-list"></div>
+        </div>
       </div>
     </div>
     <div class="row2">
@@ -820,8 +846,10 @@
 
     <div class="subheading">Driver &amp; Vehicle Details</div>
     <div class="extra-vehicle-row primary-row">
-      <input type="text" id="driverIn" list="driverList" placeholder="Driver Name" oninput="capitalizeFirst(this)">
-      <datalist id="driverList"></datalist>
+      <div class="autocomplete-wrap">
+        <input type="text" id="driverIn" placeholder="Driver Name" autocomplete="off" oninput="capitalizeFirst(this); showSuggestions('driverIn', drivers)" onfocus="showSuggestions('driverIn', drivers)" onblur="hideSuggestions('driverIn')">
+        <div class="autocomplete-list" id="driverIn-list"></div>
+      </div>
       <input type="text" id="vehicleIn" list="vehicleList" placeholder="Type of Vehicle">
       <datalist id="vehicleList"></datalist>
       <input type="text" id="regIn" placeholder="Vehicle Reg No." oninput="uppercaseInput(this)">
@@ -873,12 +901,13 @@
     <h2><span class="dot"></span>Driver Signature</h2>
     <div class="sig-wrap" id="sigWrap">
       <canvas id="sigCanvas" class="sig-canvas"></canvas>
-      <div class="sig-hint" id="sigHint">Sign here</div>
+      <div class="sig-hint" id="sigHint">Tap "Write Signature" below to sign</div>
       <div class="sig-locked-badge" id="sigLockedBadge">Signature Locked ✓</div>
     </div>
     <div class="toolrow">
-      <button class="toolbtn toolbtn--save" type="button" id="saveSigBtn" onclick="lockSignature()">Save Signature</button>
-      <button class="toolbtn" type="button" onclick="clearSignature()">Clear Signature</button>
+      <button class="toolbtn toolbtn--save" type="button" id="writeSigBtn" onclick="toggleSignatureActive()">Write Signature</button>
+      <button class="toolbtn" type="button" id="saveSigBtn" onclick="lockSignature()">Save Signature</button>
+      <button class="toolbtn" type="button" onclick="clearSignatureGated()">Clear Signature</button>
     </div>
   </div>
 
@@ -1109,7 +1138,7 @@
       washOtherNote: o['Wash Other Note'] || '',
       stopOtherNote: o['Stop Other Note'] || '',
       payment: o['Payment'] || '',
-      signature: null, // not stored server-side — reprinting a restored/recalled order won't include the signature image
+      signature: o['Signature URL'] || null, // now persisted in Drive — survives reopens, recalls, and different devices
       total: Number(o['Total']) || 0,
       synced: true
     };
@@ -1318,9 +1347,44 @@
   let washingStaffOtherName = "";
   let staffOtherNames = [];
 
+  function escapeForJsAttr(str){
+    return String(str).replace(/\\/g, '\\\\').replace(/'/g, "\\'").replace(/"/g, '&quot;');
+  }
+
+  function showSuggestions(inputId, sourceArray){
+    const input = document.getElementById(inputId);
+    const listEl = document.getElementById(inputId + '-list');
+    const query = input.value.trim().toLowerCase();
+    if(!query){ listEl.classList.remove('active'); listEl.innerHTML=''; return; }
+
+    const starts = [], contains = [];
+    sourceArray.forEach(name=>{
+      const lower = name.toLowerCase();
+      if(lower === query) return; // already typed exactly, no need to suggest it
+      if(lower.startsWith(query)) starts.push(name);
+      else if(lower.includes(query)) contains.push(name);
+    });
+    const matches = [...starts, ...contains].slice(0, 8); // capped so it never grows into a screen-covering list
+
+    if(matches.length === 0){ listEl.classList.remove('active'); listEl.innerHTML=''; return; }
+    listEl.innerHTML = matches.map(name=>
+      `<div class="autocomplete-item" onmousedown="selectSuggestion('${inputId}', '${escapeForJsAttr(name)}')">${name}</div>`
+    ).join('');
+    listEl.classList.add('active');
+  }
+
+  function selectSuggestion(inputId, value){
+    document.getElementById(inputId).value = value;
+    hideSuggestions(inputId);
+  }
+
+  function hideSuggestions(inputId){
+    const listEl = document.getElementById(inputId + '-list');
+    listEl.classList.remove('active');
+    listEl.innerHTML = '';
+  }
+
   function refreshLists(){
-    document.getElementById('companyList').innerHTML = companies.map(c=>`<option value="${c}">`).join('');
-    document.getElementById('driverList').innerHTML = drivers.map(d=>`<option value="${d}">`).join('');
     document.getElementById('vehicleList').innerHTML = vehicleTypes.map(v=>`<option value="${v}">`).join('');
     document.getElementById('staffOtherList').innerHTML = staffOtherNames.map(n=>`<option value="${n}">`).join('');
   }
@@ -1329,7 +1393,7 @@
     const el = document.getElementById('extraVehicles');
     el.innerHTML = extraVehicles.map((v,i)=>`
       <div class="extra-vehicle-row">
-        <input type="text" list="driverList" placeholder="Driver Name" value="${v.driver}" oninput="capitalizeFirst(this); updateExtraVehicle(${i},'driver',this.value)">
+        <input type="text" placeholder="Driver Name" value="${v.driver}" oninput="capitalizeFirst(this); updateExtraVehicle(${i},'driver',this.value)">
         <input type="text" list="vehicleList" placeholder="Type of Vehicle" value="${v.type}" oninput="updateExtraVehicle(${i},'type',this.value)">
         <input type="text" placeholder="Vehicle Reg No." value="${v.reg}" oninput="uppercaseInput(this); updateExtraVehicle(${i},'reg',this.value)">
         <input type="text" placeholder="Fleet No." value="${v.fleet}" oninput="updateExtraVehicle(${i},'fleet',this.value)">
@@ -1765,6 +1829,8 @@
     document.getElementById('slipIn').value = nextSlipNo();
     document.getElementById('companyIn').value='';
     document.getElementById('driverIn').value='';
+    hideSuggestions('companyIn');
+    hideSuggestions('driverIn');
     document.getElementById('customOrderNoIn').value='';
     document.getElementById('companyPhoneIn').value='';
     document.getElementById('vehicleIn').value='';
@@ -1940,7 +2006,10 @@
   }
 
   // ---- Signature pad ----
-  let sigCtx, sigDrawing = false, sigHasStrokes = false, sigLocked = false;
+  // sigActive controls whether the canvas is currently accepting strokes. Until
+  // "Write Signature" is tapped, the canvas has touch-action:auto so a normal
+  // swipe over it scrolls the page instead of starting to draw.
+  let sigCtx, sigDrawing = false, sigHasStrokes = false, sigLocked = false, sigActive = false;
 
   function setupSignaturePad(){
     const canvas = document.getElementById('sigCanvas');
@@ -1968,7 +2037,7 @@
     }
 
     canvas.addEventListener('pointerdown', e=>{
-      if(sigLocked) return;
+      if(sigLocked || !sigActive) return;
       sigDrawing = true;
       sigHasStrokes = true;
       hint.style.display = 'none';
@@ -1978,7 +2047,7 @@
       canvas.setPointerCapture(e.pointerId);
     });
     canvas.addEventListener('pointermove', e=>{
-      if(!sigDrawing || sigLocked) return;
+      if(!sigDrawing || sigLocked || !sigActive) return;
       const p = pos(e);
       sigCtx.lineTo(p.x, p.y);
       sigCtx.stroke();
@@ -1987,16 +2056,36 @@
     canvas.addEventListener('pointerleave', ()=>{ sigDrawing = false; });
   }
 
+  function toggleSignatureActive(){
+    if(sigLocked) return;
+    sigActive = !sigActive;
+    updateSignatureLockUI();
+    document.getElementById('writeSigBtn').textContent = sigActive ? 'Stop Writing' : 'Write Signature';
+    if(!sigHasStrokes){
+      document.getElementById('sigHint').textContent = sigActive ? 'Sign here' : 'Tap "Write Signature" below to sign';
+      document.getElementById('sigHint').style.display = 'block';
+    }
+  }
+
   function lockSignature(){
     if(!sigHasStrokes){ alert('Please sign before saving the signature.'); return; }
     sigLocked = true;
+    sigActive = false;
+    document.getElementById('writeSigBtn').textContent = 'Write Signature';
     updateSignatureLockUI();
   }
 
   function updateSignatureLockUI(){
     document.getElementById('sigWrap').classList.toggle('locked', sigLocked);
     document.getElementById('saveSigBtn').disabled = sigLocked;
-    document.getElementById('sigCanvas').style.touchAction = sigLocked ? 'auto' : 'none';
+    document.getElementById('writeSigBtn').disabled = sigLocked;
+    // Only capture touches (blocking page scroll) while actively writing and not yet locked
+    document.getElementById('sigCanvas').style.touchAction = (sigActive && !sigLocked) ? 'none' : 'auto';
+  }
+
+  function clearSignatureGated(){
+    if(!sigHasStrokes && !sigLocked){ return; } // nothing to clear, no need to prompt
+    if(confirm('Clear this signature? This cannot be undone.')) clearSignature();
   }
 
   function clearSignature(){
@@ -2004,6 +2093,9 @@
     if(sigCtx) sigCtx.clearRect(0, 0, canvas.width, canvas.height);
     sigHasStrokes = false;
     sigLocked = false;
+    sigActive = false;
+    document.getElementById('writeSigBtn').textContent = 'Write Signature';
+    document.getElementById('sigHint').textContent = 'Tap "Write Signature" below to sign';
     document.getElementById('sigHint').style.display = 'block';
     updateSignatureLockUI();
   }
