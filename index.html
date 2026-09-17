@@ -947,7 +947,7 @@
 
 <div class="admin-gate" id="adminGate">
   <div class="admin-gate-box">
-    <div class="admin-gate-title">Admin PIN Required</div>
+    <div class="admin-gate-title" id="adminGateTitle">Admin PIN Required</div>
     <input type="password" id="adminPinInput" inputmode="numeric" maxlength="8" placeholder="Enter PIN">
     <div class="admin-gate-buttons">
       <button type="button" class="toolbtn" onclick="cancelAdminGate()">Cancel</button>
@@ -1002,7 +1002,9 @@
   // (visible in page source to anyone who looks). Change this anytime by
   // editing this one line.
   const ADMIN_PIN = '2146';
+  const DELETE_PIN = '8402'; // separate from ADMIN_PIN — deleting an order requires this one specifically
   let pendingAdminAction = null;
+  let pendingPinType = 'admin';
 
   // ---- Local persistent cache ----
   // Saves the current order list to the browser's own storage, independent of
@@ -1256,7 +1258,7 @@
   }
 
   function deleteRecallOrderGated(i){
-    requireAdmin(()=>deleteRecallOrder(i));
+    requireAdmin(()=>deleteRecallOrder(i), 'delete');
   }
 
   function deleteRecallOrder(i){
@@ -1738,8 +1740,10 @@
   }
 
   // ---- Admin PIN gate ----
-  function requireAdmin(action){
+  function requireAdmin(action, pinType){
     pendingAdminAction = action;
+    pendingPinType = pinType || 'admin';
+    document.getElementById('adminGateTitle').textContent = pendingPinType === 'delete' ? 'Delete PIN Required' : 'Admin PIN Required';
     document.getElementById('adminPinInput').value = '';
     document.getElementById('adminGate').classList.add('active');
     setTimeout(()=>document.getElementById('adminPinInput').focus(), 50);
@@ -1750,7 +1754,8 @@
   }
   function confirmAdminGate(){
     const input = document.getElementById('adminPinInput');
-    if(input.value === ADMIN_PIN){
+    const correctPin = pendingPinType === 'delete' ? DELETE_PIN : ADMIN_PIN;
+    if(input.value === correctPin){
       document.getElementById('adminGate').classList.remove('active');
       const action = pendingAdminAction;
       pendingAdminAction = null;
@@ -1875,7 +1880,7 @@
   }
 
   function deleteOrderGated(i){
-    requireAdmin(()=>deleteOrder(i));
+    requireAdmin(()=>deleteOrder(i), 'delete');
   }
 
   function deleteOrder(i){
